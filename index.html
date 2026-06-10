@@ -2,7 +2,8 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- ปรับ Viewport ให้เหมาะสมกับสมาร์ทโฟนที่สุด ป้องกันการซูมผิดเพี้ยนเวลาพิมพ์ฟอร์ม -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ระบบคัดกรองยาเสพติดนักเรียน</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -27,9 +28,9 @@
         }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen">
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-    <div id="app"></div>
+    <div id="app" class="flex-grow"></div>
 
     <script>
         // --- ข้อมูลพื้นฐาน ---
@@ -43,10 +44,14 @@
         const allClasses = generateClasses();
         const substanceTypes = ['กัญชา', 'กระท่อม', 'ใช้ยาเสพติด', 'บุหรี่', 'บุหรี่ไฟฟ้า', 'เครื่องดื่มแอลกอฮอล์'];
 
+        // โหลดข้อมูลเก่าจากเครื่องผู้ใช้ (แก้ปัญหารีเฟรชแล้วหาย)
+        const savedSubmissions = localStorage.getItem('drugScreeningData');
+        const initialSubmissions = savedSubmissions ? JSON.parse(savedSubmissions) : [];
+
         // --- State Management ---
         const state = {
             currentView: 'home', // home, form, report, adminLogin, admin
-            submissions: [], // ลบข้อมูลจำลองออก เพื่อให้เริ่มต้นเป็นสีแดงทุกห้อง
+            submissions: initialSubmissions,
             isAdminLoggedIn: false,
             
             // สำหรับหน้า Form
@@ -77,6 +82,7 @@
         function navigateTo(view) {
             state.currentView = view;
             renderApp();
+            window.scrollTo(0, 0); // เลื่อนจอขึ้นบนสุดเมื่อเปลี่ยนหน้า
         }
 
         function handleClassClick(cls) {
@@ -130,20 +136,17 @@
 
         // --- Form Logic ---
         function handleRiskCountChange(val) {
-            // ป้องกันกรณีพิมพ์ค่าติดลบ และแปลงค่าที่พิมพ์เป็นตัวเลข
             const count = Math.max(0, val === '' ? 0 : parseInt(val) || 0);
             state.form.riskCount = val;
             
             if (count > state.form.students.length) {
-                // กรณีเปลี่ยนเลข "เพิ่มขึ้น": สร้างช่องกรอกข้อมูลเพิ่มให้ครบตามจำนวน
                 for (let i = state.form.students.length; i < count; i++) {
                     state.form.students.push({ name: '', type: 'กลุ่มเสี่ยง', substances: [] });
                 }
             } else if (count < state.form.students.length) {
-                // กรณีเปลี่ยนเลข "ลดลง": ตัดช่องส่วนเกินทิ้ง ให้เหลือเท่ากับจำนวนที่ระบุเป๊ะๆ
                 state.form.students = state.form.students.slice(0, count);
             }
-            renderStudentsList(); // อัปเดตหน้าจอทันที
+            renderStudentsList(); 
         }
 
         function addStudentRow() {
@@ -173,10 +176,9 @@
             }
         }
 
-        // --- ส่วนสำคัญ: ส่งข้อมูลไปยัง Google Sheets ---
+        // --- ส่งข้อมูลไปยัง Google Sheets ---
         async function submitForm(e) {
             e.preventDefault();
-            // Sync values from DOM
             state.form.className = document.getElementById('form-class').value;
             state.form.leaderName = document.getElementById('form-leader').value;
 
@@ -184,66 +186,64 @@
                 id: state.editingData ? state.editingData.id : Date.now(),
                 className: state.form.className,
                 riskCount: state.form.students.length,
-                students: JSON.parse(JSON.stringify(state.form.students)), // Deep copy
+                students: JSON.parse(JSON.stringify(state.form.students)),
                 leaderName: state.form.leaderName,
                 timestamp: new Date().toISOString()
             };
 
-            // แสดงหน้าโหลดข้อมูล
             document.getElementById('main-content').innerHTML = `
-                <div class="flex flex-col items-center justify-center min-h-[60vh] zoom-in">
+                <div class="flex flex-col items-center justify-center min-h-[60vh] zoom-in px-4 text-center">
                     <i data-lucide="loader-2" class="text-indigo-500 w-16 h-16 mb-4 animate-spin"></i>
-                    <h2 class="text-xl font-bold text-slate-800">กำลังส่งข้อมูลไปยังระบบ...</h2>
+                    <h2 class="text-xl sm:text-2xl font-bold text-slate-800">กำลังส่งข้อมูลไปยังระบบ...</h2>
                     <p class="text-slate-500 text-sm mt-2">กรุณารอสักครู่</p>
                 </div>
             `;
             lucide.createIcons();
 
-            // >>> อัปเดต URL ล่าสุดของคุณแล้ว <<<
             const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz5pU3oVhsQ9KgLV4ooW7D9MZE4AsWym7SpbZEs5Z5l-p4X0qxpanovQdE0m1SntKg7VA/exec';
 
             try {
-                // ส่งข้อมูลไปที่ Google Sheets
                 await fetch(SCRIPT_URL, {
                     method: 'POST',
                     body: JSON.stringify(submittedData),
-                    mode: 'no-cors' // ป้องกันปัญหาเรื่อง Cross-Origin Resource Sharing (CORS)
+                    mode: 'no-cors'
                 });
 
-                // จำลองการอัปเดตข้อมูลบนหน้าจอ
                 if (state.editingData) {
                     state.submissions = state.submissions.map(s => s.id === state.editingData.id ? submittedData : s);
                 } else {
                     state.submissions.push(submittedData);
                 }
 
-                // --- เล่นเสียง Google Text-to-Speech ---
-                const ttsText = "ขอบคุณที่ให้ความร่วมมือ แล้วมาสร้างโรงเรียนปลอดยาเสพติดด้วยกัน ขอบคุณครับ";
-                const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=th&client=tw-ob&q=${encodeURIComponent(ttsText)}`;
-                const audio = new Audio(audioUrl);
-                audio.play().catch(e => console.log("ไม่สามารถเล่นเสียงได้เนื่องจากเบราว์เซอร์บล็อก:", e));
+                // บันทึกข้อมูลลงเครื่องผู้ใช้ (LocalStorage) แก้ปัญหารีเฟรชแล้วหาย
+                localStorage.setItem('drugScreeningData', JSON.stringify(state.submissions));
 
-                // แสดงข้อความสำเร็จ
+                // --- เล่นเสียงด้วย Web Speech API (แก้ปัญหาเสียงไม่ดังตอน Deploy) ---
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance("ขอบคุณที่ให้ความร่วมมือ แล้วมาสร้างโรงเรียนปลอดยาเสพติดด้วยกัน ขอบคุณครับ");
+                    utterance.lang = 'th-TH'; // ตั้งค่าเป็นภาษาไทย
+                    window.speechSynthesis.speak(utterance);
+                }
+
                 document.getElementById('main-content').innerHTML = `
-                    <div class="flex flex-col items-center justify-center min-h-[60vh] zoom-in">
-                        <i data-lucide="check-circle-2" class="text-emerald-500 w-24 h-24 mb-6 animate-bounce"></i>
-                        <h2 class="text-2xl font-bold text-slate-800 mb-2 text-center">บันทึกข้อมูลเรียบร้อยแล้ว</h2>
-                        <p class="text-slate-500 text-center">จัดเก็บข้อมูลลง Google Sheets สำเร็จ</p>
+                    <div class="flex flex-col items-center justify-center min-h-[60vh] zoom-in px-4 text-center">
+                        <i data-lucide="check-circle-2" class="text-emerald-500 w-20 h-20 sm:w-24 sm:h-24 mb-6 animate-bounce"></i>
+                        <h2 class="text-xl sm:text-2xl font-bold text-slate-800 mb-2">บันทึกข้อมูลเรียบร้อยแล้ว</h2>
+                        <p class="text-slate-500">จัดเก็บข้อมูลลงระบบสำเร็จ</p>
                         <p class="text-sm text-slate-400 mt-4">กำลังกลับสู่หน้าหลัก...</p>
                     </div>
                 `;
                 lucide.createIcons();
 
-                // ขยายเวลาเป็น 4 วินาที เพื่อให้เสียงพูดจบก่อนสลับหน้า
                 setTimeout(() => { navigateTo('home'); }, 4000); 
             } catch (error) {
                 console.error('Error:', error);
                 document.getElementById('main-content').innerHTML = `
-                    <div class="flex flex-col items-center justify-center min-h-[60vh] zoom-in">
-                        <i data-lucide="x-circle" class="text-rose-500 w-24 h-24 mb-6"></i>
-                        <h2 class="text-2xl font-bold text-slate-800 mb-2">เกิดข้อผิดพลาด!</h2>
+                    <div class="flex flex-col items-center justify-center min-h-[60vh] zoom-in px-4 text-center">
+                        <i data-lucide="x-circle" class="text-rose-500 w-20 h-20 sm:w-24 sm:h-24 mb-6"></i>
+                        <h2 class="text-xl sm:text-2xl font-bold text-slate-800 mb-2">เกิดข้อผิดพลาด!</h2>
                         <p class="text-slate-500">ไม่สามารถส่งข้อมูลได้ กรุณาลองใหม่อีกครั้ง</p>
-                        <button onclick="navigateTo('home')" class="mt-6 px-6 py-2 bg-indigo-600 text-white rounded-lg">กลับหน้าหลัก</button>
+                        <button onclick="navigateTo('home')" class="mt-6 px-6 py-2 bg-indigo-600 text-white rounded-lg w-full sm:w-auto">กลับหน้าหลัก</button>
                     </div>
                 `;
                 lucide.createIcons();
@@ -255,24 +255,24 @@
             return `
             <nav class="bg-indigo-600 text-white shadow-lg sticky top-0 z-50 print-hidden">
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div class="flex justify-between h-16">
+                    <div class="flex justify-between h-14 sm:h-16">
                         <div class="flex items-center space-x-2 cursor-pointer" onclick="navigateTo('home')">
-                            <i data-lucide="alert-triangle" class="text-yellow-300 w-8 h-8"></i>
-                            <span class="font-bold text-lg hidden sm:block">Anti-Drug Screening</span>
+                            <i data-lucide="alert-triangle" class="text-yellow-300 w-6 h-6 sm:w-8 sm:h-8"></i>
+                            <span class="font-bold text-base sm:text-lg">Anti-Drug Screening</span>
                         </div>
-                        <div class="flex items-center space-x-1 sm:space-x-4">
-                            <button onclick="navigateTo('home')" class="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition ${state.currentView === 'home' ? 'bg-indigo-800 text-white' : 'text-indigo-100 hover:bg-indigo-500'}">
+                        <div class="flex items-center space-x-1 sm:space-x-4 overflow-x-auto no-scrollbar">
+                            <button onclick="navigateTo('home')" class="flex items-center space-x-1 px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition whitespace-nowrap ${state.currentView === 'home' ? 'bg-indigo-800 text-white' : 'text-indigo-100 hover:bg-indigo-500'}">
                                 <i data-lucide="home" class="w-4 h-4"></i> <span class="hidden sm:inline">หน้าแรก</span>
                             </button>
-                            <button onclick="navigateTo('report')" class="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition ${state.currentView === 'report' ? 'bg-indigo-800 text-white' : 'text-indigo-100 hover:bg-indigo-500'}">
+                            <button onclick="navigateTo('report')" class="flex items-center space-x-1 px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition whitespace-nowrap ${state.currentView === 'report' ? 'bg-indigo-800 text-white' : 'text-indigo-100 hover:bg-indigo-500'}">
                                 <i data-lucide="bar-chart-3" class="w-4 h-4"></i> <span class="hidden sm:inline">รายงานผล</span>
                             </button>
                             ${state.isAdminLoggedIn ? `
-                                <button onclick="adminLogout()" class="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium hover:bg-indigo-500 transition text-indigo-100">
-                                    <i data-lucide="log-out" class="w-4 h-4"></i> <span class="hidden sm:inline">ออกจากระบบแอดมิน</span>
+                                <button onclick="adminLogout()" class="flex items-center space-x-1 px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium hover:bg-indigo-500 transition text-indigo-100 whitespace-nowrap">
+                                    <i data-lucide="log-out" class="w-4 h-4"></i> <span class="hidden sm:inline">ออกจากระบบ</span>
                                 </button>
                             ` : `
-                                <button onclick="navigateTo('adminLogin')" class="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition ${state.currentView === 'adminLogin' ? 'bg-indigo-800 text-white' : 'text-indigo-100 hover:bg-indigo-500'}">
+                                <button onclick="navigateTo('adminLogin')" class="flex items-center space-x-1 px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition whitespace-nowrap ${state.currentView === 'adminLogin' ? 'bg-indigo-800 text-white' : 'text-indigo-100 hover:bg-indigo-500'}">
                                     <i data-lucide="settings" class="w-4 h-4"></i> <span class="hidden sm:inline">แอดมิน</span>
                                 </button>
                             `}
@@ -285,24 +285,24 @@
         function renderHome() {
             const submittedClasses = state.submissions.map(s => s.className);
             let html = `
-                <div class="space-y-8 fade-in">
+                <div class="space-y-6 sm:space-y-8 fade-in">
                     <div class="text-center space-y-2">
-                        <h1 class="text-3xl font-bold text-slate-800">หน้าต่างคัดกรองการใช้สารเสพติด</h1>
-                        <p class="text-slate-500">สำหรับครูที่ปรึกษา กรุณาเลือกห้องเรียนของท่านเพื่อกรอกข้อมูล</p>
+                        <h1 class="text-2xl sm:text-3xl font-bold text-slate-800">หน้าต่างคัดกรองการใช้สารเสพติด</h1>
+                        <p class="text-sm sm:text-base text-slate-500">สำหรับครูที่ปรึกษา กรุณาเลือกห้องเรียนของท่านเพื่อกรอกข้อมูล</p>
                     </div>
-                    <div class="flex justify-center gap-6 mb-8">
-                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-emerald-500 shadow"></div><span class="text-sm">บันทึกแล้ว (คลิกเพื่อแก้ไข)</span></div>
-                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-rose-500 shadow"></div><span class="text-sm">ยังไม่กรอกข้อมูล</span></div>
+                    <div class="flex flex-wrap justify-center gap-4 mb-6 sm:mb-8">
+                        <div class="flex items-center gap-2"><div class="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-emerald-500 shadow"></div><span class="text-xs sm:text-sm text-slate-600">บันทึกแล้ว (คลิกเพื่อแก้ไข)</span></div>
+                        <div class="flex items-center gap-2"><div class="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-rose-500 shadow"></div><span class="text-xs sm:text-sm text-slate-600">ยังไม่กรอกข้อมูล</span></div>
                     </div>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-10 gap-3">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-10 gap-2 sm:gap-3">
             `;
 
             allClasses.forEach(cls => {
                 const isSubmitted = submittedClasses.includes(cls);
                 html += `
-                    <button onclick="handleClassClick('${cls}')" class="group relative overflow-hidden p-4 rounded-xl font-semibold text-sm transition-all duration-300 flex flex-col items-center justify-center gap-2 shadow-sm hover:shadow-md hover:-translate-y-1
+                    <button onclick="handleClassClick('${cls}')" class="group relative overflow-hidden p-3 sm:p-4 rounded-xl font-semibold text-xs sm:text-sm transition-all duration-300 flex flex-col items-center justify-center gap-1 sm:gap-2 shadow-sm hover:shadow-md hover:-translate-y-1 active:scale-95
                         ${isSubmitted ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:border-emerald-500 hover:bg-emerald-100' : 'bg-white text-rose-600 border border-rose-200 hover:border-rose-300'}">
-                        ${isSubmitted ? `<i data-lucide="check-circle-2" class="text-emerald-500 group-hover:hidden w-6 h-6"></i><i data-lucide="edit-3" class="text-emerald-600 hidden group-hover:block w-6 h-6"></i>` : `<i data-lucide="users" class="text-rose-400 w-6 h-6"></i>`}
+                        ${isSubmitted ? `<i data-lucide="check-circle-2" class="text-emerald-500 group-hover:hidden w-5 h-5 sm:w-6 sm:h-6"></i><i data-lucide="edit-3" class="text-emerald-600 hidden group-hover:block w-5 h-5 sm:w-6 sm:h-6"></i>` : `<i data-lucide="users" class="text-rose-400 w-5 h-5 sm:w-6 sm:h-6"></i>`}
                         ${cls}
                     </button>
                 `;
@@ -321,30 +321,30 @@
                 return;
             }
 
-            let html = '<div class="space-y-4 border-l-2 border-indigo-200 pl-4">';
+            let html = '<div class="space-y-4 border-l-2 border-indigo-200 pl-3 sm:pl-4">';
             state.form.students.forEach((student, index) => {
                 html += `
-                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4 relative group">
+                    <div class="bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 space-y-3 sm:space-y-4 relative group">
                         <div class="flex justify-between items-center">
-                            <div class="font-medium text-indigo-700 bg-indigo-100 px-3 py-1 rounded-md text-sm">คนที่ ${index + 1}</div>
-                            <button type="button" onclick="removeStudent(${index})" class="text-slate-400 hover:text-rose-500 flex items-center gap-1 text-sm bg-white border px-2 py-1 rounded-md transition-colors">
-                                <i data-lucide="trash-2" class="w-4 h-4"></i> <span class="hidden sm:inline">ลบข้อมูลรายนี้</span>
+                            <div class="font-medium text-indigo-700 bg-indigo-100 px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm">คนที่ ${index + 1}</div>
+                            <button type="button" onclick="removeStudent(${index})" class="text-slate-400 hover:text-rose-500 flex items-center gap-1 text-xs sm:text-sm bg-white border px-2 py-1 rounded-md transition-colors shadow-sm">
+                                <i data-lucide="trash-2" class="w-3 h-3 sm:w-4 sm:h-4"></i> <span>ลบรายนี้</span>
                             </button>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <input type="text" required placeholder="ชื่อ - นามสกุล นักเรียน" value="${student.name}" onchange="updateStudent(${index}, 'name', this.value)" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
-                            <select onchange="updateStudent(${index}, 'type', this.value)" class="w-full p-2.5 border border-slate-300 rounded-lg bg-white">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                            <input type="text" required placeholder="ชื่อ - นามสกุล นักเรียน" value="${student.name}" onchange="updateStudent(${index}, 'name', this.value)" class="w-full p-2 sm:p-2.5 text-sm sm:text-base border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                            <select onchange="updateStudent(${index}, 'type', this.value)" class="w-full p-2 sm:p-2.5 text-sm sm:text-base border border-slate-300 rounded-lg bg-white">
                                 <option value="กลุ่มเสี่ยง" ${student.type === 'กลุ่มเสี่ยง' ? 'selected' : ''}>กลุ่มเสี่ยง</option>
                                 <option value="กลุ่มเสพ" ${student.type === 'กลุ่มเสพ' ? 'selected' : ''}>กลุ่มเสพ</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-2">พฤติกรรมความเสี่ยง (เลือกได้มากกว่า 1)</label>
+                            <label class="block text-xs sm:text-sm font-medium text-slate-700 mb-2">พฤติกรรมความเสี่ยง (เลือกได้มากกว่า 1)</label>
                             <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                 ${substanceTypes.map(sub => `
-                                    <label class="flex items-center space-x-2 cursor-pointer p-2 hover:bg-slate-200 rounded-md transition bg-white border border-slate-100">
+                                    <label class="flex items-center space-x-2 cursor-pointer p-1.5 sm:p-2 hover:bg-slate-200 rounded-md transition bg-white border border-slate-100 shadow-sm">
                                         <input type="checkbox" onchange="toggleSubstance(${index}, '${sub}')" ${student.substances.includes(sub) ? 'checked' : ''} class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
-                                        <span class="text-sm text-slate-700">${sub}</span>
+                                        <span class="text-xs sm:text-sm text-slate-700 truncate">${sub}</span>
                                     </label>
                                 `).join('')}
                             </div>
@@ -359,65 +359,64 @@
 
         function renderForm() {
             let html = `
-                <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-10 fade-in">
-                    <div class="mb-8 border-b pb-4 flex justify-between items-end">
+                <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6 md:p-10 fade-in">
+                    <div class="mb-6 sm:mb-8 border-b pb-4 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-2">
                         <div>
-                            <h2 class="text-2xl font-bold text-slate-800">${state.editingData ? 'แก้ไขข้อมูลคัดกรองนักเรียน' : 'แบบฟอร์มคัดกรองนักเรียน'}</h2>
-                            <p class="text-slate-500 mt-1">กรุณากรอกข้อมูลให้ครบถ้วนตามความเป็นจริง</p>
+                            <h2 class="text-xl sm:text-2xl font-bold text-slate-800">${state.editingData ? 'แก้ไขข้อมูลคัดกรอง' : 'แบบฟอร์มคัดกรองนักเรียน'}</h2>
+                            <p class="text-xs sm:text-sm text-slate-500 mt-1">กรุณากรอกข้อมูลให้ครบถ้วนตามความเป็นจริง</p>
                         </div>
-                        ${state.editingData ? `<span class="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1"><i data-lucide="edit-3" class="w-4 h-4"></i> โหมดแก้ไข</span>` : ''}
+                        ${state.editingData ? `<span class="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-xs sm:text-sm font-medium flex items-center justify-center w-fit gap-1"><i data-lucide="edit-3" class="w-4 h-4"></i> โหมดแก้ไข</span>` : ''}
                     </div>
 
-                    <form onsubmit="submitForm(event)" class="space-y-10">
+                    <form onsubmit="submitForm(event)" class="space-y-8 sm:space-y-10">
                         <!-- ส่วนที่ 1 -->
-                        <section class="space-y-4">
-                            <div class="flex items-center gap-2 text-lg font-semibold text-indigo-700">
-                                <span class="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center">1</span> ข้อมูลห้องเรียน
+                        <section class="space-y-3 sm:space-y-4">
+                            <div class="flex items-center gap-2 text-base sm:text-lg font-semibold text-indigo-700">
+                                <span class="bg-indigo-100 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-sm sm:text-base">1</span> ข้อมูลห้องเรียน
                             </div>
-                            <div class="ml-10">
-                                <label class="block text-sm font-medium text-slate-700 mb-1">เลือกห้องเรียน</label>
+                            <div class="ml-9 sm:ml-10">
+                                <label class="block text-xs sm:text-sm font-medium text-slate-700 mb-1">เลือกห้องเรียน</label>
                                 <div class="relative w-full sm:w-1/2">
-                                    <select id="form-class" required ${state.editingData ? 'disabled' : ''} class="w-full p-3 border border-slate-300 rounded-lg appearance-none bg-white disabled:bg-slate-100 disabled:text-slate-500">
+                                    <select id="form-class" required ${state.editingData ? 'disabled' : ''} class="w-full p-2.5 sm:p-3 text-sm sm:text-base border border-slate-300 rounded-lg appearance-none bg-white disabled:bg-slate-100 disabled:text-slate-500">
                                         <option value="">-- กรุณาเลือกห้องเรียน --</option>
                                         ${allClasses.map(cls => `<option value="${cls}" ${state.form.className === cls ? 'selected' : ''}>${cls}</option>`).join('')}
                                     </select>
-                                    <i data-lucide="chevron-down" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none w-5 h-5"></i>
+                                    <i data-lucide="chevron-down" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none w-4 h-4 sm:w-5 sm:h-5"></i>
                                 </div>
                             </div>
                         </section>
 
                         <!-- ส่วนที่ 2 -->
-                        <section class="space-y-4">
-                            <div class="flex items-center gap-2 text-lg font-semibold text-indigo-700">
-                                <span class="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center">2</span> ข้อมูลกลุ่มเสี่ยง / กลุ่มเสพ
+                        <section class="space-y-3 sm:space-y-4">
+                            <div class="flex items-center gap-2 text-base sm:text-lg font-semibold text-indigo-700">
+                                <span class="bg-indigo-100 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-sm sm:text-base">2</span> ข้อมูลกลุ่มเสี่ยง / กลุ่มเสพ
                             </div>
-                            <div class="ml-10 space-y-6">
+                            <div class="ml-9 sm:ml-10 space-y-4 sm:space-y-6">
                                 <div>
-                                    <label class="block text-sm font-medium text-slate-700 mb-1">จำนวนนักเรียน (หากไม่มีให้ใส่ 0)</label>
-                                    <input type="number" id="form-riskcount" min="0" required value="${state.form.riskCount}" oninput="handleRiskCountChange(this.value)" class="w-full sm:w-1/3 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="ระบุจำนวนตัวเลข">
-                                    <p class="text-xs text-slate-500 mt-1">คุณสามารถพิมพ์แก้ตัวเลข หรือกดปุ่ม 'เพิ่มรายชื่อ' ด้านล่างได้เลย</p>
+                                    <label class="block text-xs sm:text-sm font-medium text-slate-700 mb-1">จำนวนนักเรียน (หากไม่มีให้ใส่ 0)</label>
+                                    <input type="number" id="form-riskcount" min="0" required value="${state.form.riskCount}" oninput="handleRiskCountChange(this.value)" class="w-full sm:w-1/3 p-2.5 sm:p-3 text-sm sm:text-base border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="ระบุจำนวนตัวเลข">
                                 </div>
 
                                 <div id="students-container"></div>
                                 
-                                <button type="button" onclick="addStudentRow()" class="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100 transition-colors w-full sm:w-auto justify-center">
-                                    <i data-lucide="plus-circle" class="w-5 h-5"></i> เพิ่มรายชื่อนักเรียนอีก 1 คน
+                                <button type="button" onclick="addStudentRow()" class="flex items-center justify-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium bg-indigo-50 px-4 py-2.5 rounded-lg border border-indigo-100 transition-colors w-full sm:w-auto text-sm sm:text-base">
+                                    <i data-lucide="plus-circle" class="w-4 h-4 sm:w-5 sm:h-5"></i> เพิ่มนักเรียนอีก 1 คน
                                 </button>
                             </div>
                         </section>
 
                         <!-- ส่วนที่ 3 -->
-                        <section class="space-y-4">
-                            <div class="flex items-center gap-2 text-lg font-semibold text-indigo-700">
-                                <span class="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center">3</span> ตัวแทนเข้าอบรม
+                        <section class="space-y-3 sm:space-y-4">
+                            <div class="flex items-center gap-2 text-base sm:text-lg font-semibold text-indigo-700">
+                                <span class="bg-indigo-100 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-sm sm:text-base">3</span> ตัวแทนเข้าอบรม
                             </div>
-                            <div class="ml-10">
-                                <label class="block text-sm font-medium text-slate-700 mb-1">ชื่อตัวแทนเข้าอบรม (สำหรับห้องเรียนนี้)</label>
-                                <input type="text" id="form-leader" required value="${state.form.leaderName}" class="w-full sm:w-2/3 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="ชื่อ - นามสกุล ตัวแทนเข้าอบรม">
+                            <div class="ml-9 sm:ml-10">
+                                <label class="block text-xs sm:text-sm font-medium text-slate-700 mb-1">ชื่อตัวแทนเข้าอบรม (สำหรับห้องเรียนนี้)</label>
+                                <input type="text" id="form-leader" required value="${state.form.leaderName}" class="w-full sm:w-2/3 p-2.5 sm:p-3 text-sm sm:text-base border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="ชื่อ - นามสกุล ตัวแทนเข้าอบรม">
                             </div>
                         </section>
 
-                        <div class="pt-6 border-t flex flex-col sm:flex-row justify-end gap-4">
+                        <div class="pt-6 border-t flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-4">
                             <button type="button" onclick="navigateTo('home')" class="px-6 py-3 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 font-medium transition w-full sm:w-auto">ยกเลิก</button>
                             <button type="submit" class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium shadow-md shadow-indigo-200 transition w-full sm:w-auto">${state.editingData ? 'บันทึกการแก้ไขข้อมูล' : 'บันทึกข้อมูลและส่ง'}</button>
                         </div>
@@ -429,12 +428,11 @@
 
         function updateReportFilter(key, value) {
             state.reportFilters[key] = value;
-            if (key === 'grade') state.reportFilters.class = 'all'; // Reset class if grade changes
+            if (key === 'grade') state.reportFilters.class = 'all'; 
             renderApp();
         }
 
         function renderReport() {
-            // Process Data
             let allStudents = [];
             state.submissions.forEach(sub => {
                 if (state.reportFilters.grade !== 'all' && !sub.className.startsWith(state.reportFilters.grade)) return;
@@ -473,16 +471,16 @@
             }
 
             return `
-                <div class="space-y-6 fade-in">
-                    <div class="flex justify-between items-end border-b pb-4">
+                <div class="space-y-4 sm:space-y-6 fade-in">
+                    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-end border-b pb-4 gap-2">
                         <div>
-                            <h2 class="text-2xl font-bold text-slate-800">รายงานสถิติภาพรวมโรงเรียน</h2>
-                            <p class="text-slate-500 text-sm mt-1">อัปเดตข้อมูลแบบ Real-time (ไม่แสดงรายชื่อเพื่อความเป็นส่วนตัว)</p>
+                            <h2 class="text-xl sm:text-2xl font-bold text-slate-800">รายงานสถิติภาพรวมโรงเรียน</h2>
+                            <p class="text-xs sm:text-sm text-slate-500 mt-1">อัปเดตข้อมูลแบบ Real-time (ไม่แสดงรายชื่อ)</p>
                         </div>
                     </div>
 
                     <!-- Filters -->
-                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                         <div>
                             <label class="text-xs font-semibold text-slate-500 uppercase">ระดับชั้น</label>
                             <select onchange="updateReportFilter('grade', this.value)" class="w-full mt-1 p-2 border rounded-md text-sm">
@@ -501,8 +499,8 @@
                             <label class="text-xs font-semibold text-slate-500 uppercase">กลุ่มเป้าหมาย</label>
                             <select onchange="updateReportFilter('type', this.value)" class="w-full mt-1 p-2 border rounded-md text-sm">
                                 <option value="all" ${state.reportFilters.type === 'all' ? 'selected':''}>ทั้งหมด</option>
-                                <option value="กลุ่มเสี่ยง" ${state.reportFilters.type === 'กลุ่มเสี่ยง' ? 'selected':''}>เฉพาะกลุ่มเสี่ยง</option>
-                                <option value="กลุ่มเสพ" ${state.reportFilters.type === 'กลุ่มเสพ' ? 'selected':''}>เฉพาะกลุ่มเสพ</option>
+                                <option value="กลุ่มเสี่ยง" ${state.reportFilters.type === 'กลุ่มเสี่ยง' ? 'selected':''}>กลุ่มเสี่ยง</option>
+                                <option value="กลุ่มเสพ" ${state.reportFilters.type === 'กลุ่มเสพ' ? 'selected':''}>กลุ่มเสพ</option>
                             </select>
                         </div>
                         <div>
@@ -515,45 +513,45 @@
                     </div>
 
                     <!-- KPI Cards -->
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div class="bg-white p-6 rounded-xl border-l-4 border-indigo-500 shadow-sm flex flex-col justify-center">
-                            <span class="text-sm font-medium text-slate-500">จำนวนที่พบทั้งหมด</span>
-                            <span class="text-4xl font-bold text-slate-800 mt-2">${stats.total} <span class="text-base font-normal text-slate-400">คน</span></span>
+                    <div class="grid grid-cols-3 gap-2 sm:gap-4">
+                        <div class="bg-white p-3 sm:p-6 rounded-xl border-l-4 border-indigo-500 shadow-sm flex flex-col justify-center text-center sm:text-left">
+                            <span class="text-xs sm:text-sm font-medium text-slate-500">พบทั้งหมด</span>
+                            <span class="text-2xl sm:text-4xl font-bold text-slate-800 mt-1 sm:mt-2">${stats.total} <span class="hidden sm:inline text-base font-normal text-slate-400">คน</span></span>
                         </div>
-                        <div class="bg-white p-6 rounded-xl border-l-4 border-amber-500 shadow-sm flex flex-col justify-center">
-                            <span class="text-sm font-medium text-slate-500">กลุ่มเสี่ยง</span>
-                            <span class="text-4xl font-bold text-amber-600 mt-2">${stats.riskCount} <span class="text-base font-normal text-slate-400">คน</span></span>
+                        <div class="bg-white p-3 sm:p-6 rounded-xl border-l-4 border-amber-500 shadow-sm flex flex-col justify-center text-center sm:text-left">
+                            <span class="text-xs sm:text-sm font-medium text-slate-500">กลุ่มเสี่ยง</span>
+                            <span class="text-2xl sm:text-4xl font-bold text-amber-600 mt-1 sm:mt-2">${stats.riskCount} <span class="hidden sm:inline text-base font-normal text-slate-400">คน</span></span>
                         </div>
-                        <div class="bg-white p-6 rounded-xl border-l-4 border-rose-500 shadow-sm flex flex-col justify-center">
-                            <span class="text-sm font-medium text-slate-500">กลุ่มเสพ</span>
-                            <span class="text-4xl font-bold text-rose-600 mt-2">${stats.userCount} <span class="text-base font-normal text-slate-400">คน</span></span>
+                        <div class="bg-white p-3 sm:p-6 rounded-xl border-l-4 border-rose-500 shadow-sm flex flex-col justify-center text-center sm:text-left">
+                            <span class="text-xs sm:text-sm font-medium text-slate-500">กลุ่มเสพ</span>
+                            <span class="text-2xl sm:text-4xl font-bold text-rose-600 mt-1 sm:mt-2">${stats.userCount} <span class="hidden sm:inline text-base font-normal text-slate-400">คน</span></span>
                         </div>
                     </div>
 
                     <!-- Charts -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                            <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="alert-circle" class="text-indigo-500 w-5 h-5"></i> สถิติแยกตามชนิดพฤติกรรม</h3>
-                            <div class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                        <div class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="alert-circle" class="text-indigo-500 w-5 h-5"></i> ชนิดพฤติกรรม</h3>
+                            <div class="space-y-3 sm:space-y-4">
                                 ${Object.entries(stats.substanceCounts).sort((a,b)=>b[1]-a[1]).map(([name, count]) => `
                                     <div>
-                                        <div class="flex justify-between text-sm mb-1"><span>${name}</span><span class="font-bold">${count} คน</span></div>
-                                        <div class="w-full bg-slate-100 rounded-full h-2">
-                                            <div class="bg-indigo-500 h-2 rounded-full" style="width: ${stats.total > 0 ? (count/stats.total)*100 : 0}%"></div>
+                                        <div class="flex justify-between text-xs sm:text-sm mb-1"><span>${name}</span><span class="font-bold">${count} คน</span></div>
+                                        <div class="w-full bg-slate-100 rounded-full h-1.5 sm:h-2">
+                                            <div class="bg-indigo-500 h-1.5 sm:h-2 rounded-full" style="width: ${stats.total > 0 ? (count/stats.total)*100 : 0}%"></div>
                                         </div>
                                     </div>
                                 `).join('')}
                             </div>
                         </div>
 
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                            <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="bar-chart-3" class="text-indigo-500 w-5 h-5"></i> สถิติแยกตามระดับชั้น</h3>
-                            <div class="space-y-4">
+                        <div class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="bar-chart-3" class="text-indigo-500 w-5 h-5"></i> ระดับชั้น</h3>
+                            <div class="space-y-3 sm:space-y-4">
                                 ${Object.entries(stats.gradeCounts).map(([name, count]) => `
                                     <div>
-                                        <div class="flex justify-between text-sm mb-1"><span>${name}</span><span class="font-bold">${count} คน</span></div>
-                                        <div class="w-full bg-slate-100 rounded-full h-2">
-                                            <div class="bg-emerald-500 h-2 rounded-full" style="width: ${stats.total > 0 ? (count/stats.total)*100 : 0}%"></div>
+                                        <div class="flex justify-between text-xs sm:text-sm mb-1"><span>${name}</span><span class="font-bold">${count} คน</span></div>
+                                        <div class="w-full bg-slate-100 rounded-full h-1.5 sm:h-2">
+                                            <div class="bg-emerald-500 h-1.5 sm:h-2 rounded-full" style="width: ${stats.total > 0 ? (count/stats.total)*100 : 0}%"></div>
                                         </div>
                                     </div>
                                 `).join('')}
@@ -562,9 +560,9 @@
                     </div>
 
                     <!-- Summary -->
-                    <div class="bg-indigo-50 p-6 rounded-xl border border-indigo-100">
-                        <h3 class="font-bold text-indigo-900 mb-2 flex items-center gap-2"><i data-lucide="file-text" class="w-5 h-5"></i> บทสรุปผู้บริหาร (Executive Summary)</h3>
-                        <p class="text-indigo-800 text-sm leading-relaxed indent-8">${summaryText}</p>
+                    <div class="bg-indigo-50 p-4 sm:p-6 rounded-xl border border-indigo-100">
+                        <h3 class="font-bold text-indigo-900 mb-2 flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4 sm:w-5 sm:h-5"></i> บทสรุปภาพรวม</h3>
+                        <p class="text-indigo-800 text-xs sm:text-sm leading-relaxed indent-6 sm:indent-8">${summaryText}</p>
                     </div>
                 </div>
             `;
@@ -572,16 +570,16 @@
 
         function renderAdminLogin() {
             return `
-                <div class="max-w-md mx-auto mt-20 bg-white p-8 rounded-2xl shadow-md border border-slate-200 text-center zoom-in">
-                    <div class="mx-auto bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
-                        <i data-lucide="settings" class="text-slate-600 w-8 h-8"></i>
+                <div class="max-w-md mx-auto mt-10 sm:mt-20 bg-white p-6 sm:p-8 rounded-2xl shadow-md border border-slate-200 text-center zoom-in">
+                    <div class="mx-auto bg-slate-100 w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mb-4">
+                        <i data-lucide="settings" class="text-slate-600 w-6 h-6 sm:w-8 sm:h-8"></i>
                     </div>
-                    <h2 class="text-2xl font-bold text-slate-800 mb-2">สำหรับผู้ดูแลระบบ</h2>
-                    <p class="text-slate-500 text-sm mb-6">กรุณากรอกรหัสผ่านเพื่อเข้าถึงข้อมูลรายชื่อนักเรียน</p>
+                    <h2 class="text-xl sm:text-2xl font-bold text-slate-800 mb-2">สำหรับผู้ดูแลระบบ</h2>
+                    <p class="text-slate-500 text-xs sm:text-sm mb-6">กรุณากรอกรหัสผ่านเพื่อเข้าถึงข้อมูลรายชื่อนักเรียน</p>
                     <form onsubmit="adminLogin(event)" class="space-y-4">
                         <div>
                             <input type="password" id="admin-password" placeholder="รหัสผ่าน" class="w-full p-3 border rounded-lg text-center border-slate-300 focus:ring-2 focus:ring-indigo-200 focus:outline-none">
-                            <p id="login-error" class="text-rose-500 text-sm mt-2 hidden">รหัสผ่านไม่ถูกต้อง</p>
+                            <p id="login-error" class="text-rose-500 text-xs sm:text-sm mt-2 hidden">รหัสผ่านไม่ถูกต้อง</p>
                         </div>
                         <button type="submit" class="w-full bg-slate-800 text-white p-3 rounded-lg hover:bg-slate-900 transition font-medium">เข้าสู่ระบบ</button>
                     </form>
@@ -598,21 +596,21 @@
                     if (sub.students.length === 0) {
                         tbodyHtml += `
                             <tr class="border-b hover:bg-slate-50">
-                                <td class="p-3 font-medium text-slate-800">${sub.className}</td>
-                                <td colspan="3" class="p-3 text-emerald-600 bg-emerald-50 text-center">ไม่มีนักเรียนกลุ่มเสี่ยง (จำนวน 0 คน)</td>
-                                <td class="p-3">${sub.leaderName}</td>
-                                <td class="p-3 text-xs text-slate-400">${new Date(sub.timestamp).toLocaleDateString('th-TH')}</td>
+                                <td class="p-2 sm:p-3 font-medium text-slate-800">${sub.className}</td>
+                                <td colspan="3" class="p-2 sm:p-3 text-emerald-600 bg-emerald-50 text-center">ไม่มีนักเรียนกลุ่มเสี่ยง (จำนวน 0 คน)</td>
+                                <td class="p-2 sm:p-3">${sub.leaderName}</td>
+                                <td class="p-2 sm:p-3 text-xs text-slate-400">${new Date(sub.timestamp).toLocaleDateString('th-TH')}</td>
                             </tr>`;
                     } else {
                         sub.students.forEach((student, idx) => {
                             tbodyHtml += `
                                 <tr class="border-b hover:bg-slate-50">
-                                    <td class="p-3 font-medium text-slate-800">${idx === 0 ? sub.className : ''}</td>
-                                    <td class="p-3">${student.name}</td>
-                                    <td class="p-3"><span class="px-2 py-1 rounded-full text-xs font-medium ${student.type === 'กลุ่มเสี่ยง' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'}">${student.type}</span></td>
-                                    <td class="p-3">${student.substances.join(', ')}</td>
-                                    <td class="p-3">${idx === 0 ? sub.leaderName : ''}</td>
-                                    <td class="p-3 text-xs text-slate-400">${idx === 0 ? new Date(sub.timestamp).toLocaleString('th-TH', {dateStyle:'short', timeStyle:'short'}) : ''}</td>
+                                    <td class="p-2 sm:p-3 font-medium text-slate-800">${idx === 0 ? sub.className : ''}</td>
+                                    <td class="p-2 sm:p-3">${student.name}</td>
+                                    <td class="p-2 sm:p-3"><span class="px-2 py-1 rounded-full text-[10px] sm:text-xs font-medium ${student.type === 'กลุ่มเสี่ยง' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'}">${student.type}</span></td>
+                                    <td class="p-2 sm:p-3">${student.substances.join(', ')}</td>
+                                    <td class="p-2 sm:p-3">${idx === 0 ? sub.leaderName : ''}</td>
+                                    <td class="p-2 sm:p-3 text-xs text-slate-400">${idx === 0 ? new Date(sub.timestamp).toLocaleString('th-TH', {dateStyle:'short', timeStyle:'short'}) : ''}</td>
                                 </tr>`;
                         });
                     }
@@ -620,29 +618,29 @@
             }
 
             return `
-                <div class="space-y-6 bg-white p-6 md:p-8 rounded-xl shadow-sm border border-slate-200 fade-in">
+                <div class="space-y-4 sm:space-y-6 bg-white p-4 sm:p-6 md:p-8 rounded-xl shadow-sm border border-slate-200 fade-in">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4 print-hidden">
                         <div>
-                            <h2 class="text-2xl font-bold text-slate-800">ระบบจัดการข้อมูล (Admin)</h2>
-                            <p class="text-slate-500 text-sm">ข้อมูลรายชื่อนักเรียนกลุ่มเสี่ยง/เสพ ทั้งโรงเรียน</p>
+                            <h2 class="text-xl sm:text-2xl font-bold text-slate-800">ระบบจัดการข้อมูล (Admin)</h2>
+                            <p class="text-xs sm:text-sm text-slate-500">ข้อมูลรายชื่อนักเรียนกลุ่มเสี่ยง/เสพ ทั้งโรงเรียน</p>
                         </div>
-                        <button onclick="window.print()" class="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg hover:bg-indigo-100 transition">
-                            <i data-lucide="printer" class="w-5 h-5"></i> พิมพ์รายงาน
+                        <button onclick="window.print()" class="flex items-center justify-center gap-2 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg hover:bg-indigo-100 transition w-full sm:w-auto">
+                            <i data-lucide="printer" class="w-4 h-4 sm:w-5 sm:h-5"></i> พิมพ์รายงาน
                         </button>
                     </div>
                     <div class="overflow-x-auto print:overflow-visible">
-                        <table class="w-full text-left border-collapse min-w-[800px]">
+                        <table class="w-full text-left border-collapse min-w-[600px] sm:min-w-[800px]">
                             <thead>
-                                <tr class="bg-slate-100 text-slate-700 text-sm">
-                                    <th class="p-3 border-b font-semibold w-24">ห้องเรียน</th>
-                                    <th class="p-3 border-b font-semibold">ชื่อ-นามสกุล</th>
-                                    <th class="p-3 border-b font-semibold w-32">ประเภท</th>
-                                    <th class="p-3 border-b font-semibold">สิ่งที่เกี่ยวข้อง</th>
-                                    <th class="p-3 border-b font-semibold">ตัวแทนเข้าอบรม</th>
-                                    <th class="p-3 border-b font-semibold w-32">เวลาที่บันทึก</th>
+                                <tr class="bg-slate-100 text-slate-700 text-xs sm:text-sm whitespace-nowrap">
+                                    <th class="p-2 sm:p-3 border-b font-semibold w-16 sm:w-24">ห้องเรียน</th>
+                                    <th class="p-2 sm:p-3 border-b font-semibold">ชื่อ-นามสกุล</th>
+                                    <th class="p-2 sm:p-3 border-b font-semibold w-24 sm:w-32">ประเภท</th>
+                                    <th class="p-2 sm:p-3 border-b font-semibold">สิ่งที่เกี่ยวข้อง</th>
+                                    <th class="p-2 sm:p-3 border-b font-semibold">ตัวแทนเข้าอบรม</th>
+                                    <th class="p-2 sm:p-3 border-b font-semibold w-24 sm:w-32">เวลาที่บันทึก</th>
                                 </tr>
                             </thead>
-                            <tbody class="text-sm text-slate-600">
+                            <tbody class="text-xs sm:text-sm text-slate-600">
                                 ${tbodyHtml}
                             </tbody>
                         </table>
@@ -654,21 +652,21 @@
         function renderModal() {
             if (!state.confirmModal.isOpen) return '';
             return `
-                <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[100] fade-in print-hidden">
-                    <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl max-w-sm w-full mx-4 zoom-in">
-                        <div class="flex flex-col items-center text-center space-y-4">
-                            <div class="w-16 h-16 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mb-2">
-                                <i data-lucide="edit-3" class="w-8 h-8"></i>
+                <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[100] px-4 fade-in print-hidden">
+                    <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl max-w-sm w-full zoom-in">
+                        <div class="flex flex-col items-center text-center space-y-3 sm:space-y-4">
+                            <div class="w-12 h-12 sm:w-16 sm:h-16 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mb-2">
+                                <i data-lucide="edit-3" class="w-6 h-6 sm:w-8 sm:h-8"></i>
                             </div>
-                            <h3 class="text-xl font-bold text-slate-800">ยืนยันการแก้ไขข้อมูล</h3>
-                            <p class="text-slate-600">
+                            <h3 class="text-lg sm:text-xl font-bold text-slate-800">ยืนยันการแก้ไขข้อมูล</h3>
+                            <p class="text-sm sm:text-base text-slate-600">
                                 ห้อง <span class="font-bold text-indigo-600 text-lg">${state.confirmModal.classToEdit}</span> มีการบันทึกข้อมูลไปแล้ว<br/>
-                                คุณต้องการเข้าสู่ "โหมดแก้ไข" ใช่หรือไม่?
+                                คุณต้องการแก้ไขข้อมูลใช่หรือไม่?
                             </p>
                         </div>
-                        <div class="flex flex-col sm:flex-row justify-center gap-3 mt-8">
-                            <button onclick="cancelEdit()" class="px-5 py-2.5 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600 font-medium transition w-full sm:w-auto">ยกเลิก</button>
-                            <button onclick="proceedToEdit()" class="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium shadow-md shadow-emerald-200 transition w-full sm:w-auto">ตกลง, แก้ไขข้อมูล</button>
+                        <div class="flex flex-col sm:flex-row justify-center gap-2 sm:gap-3 mt-6 sm:mt-8">
+                            <button onclick="cancelEdit()" class="px-4 py-2 sm:px-5 sm:py-2.5 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600 font-medium transition w-full sm:w-auto text-sm sm:text-base">ยกเลิก</button>
+                            <button onclick="proceedToEdit()" class="px-4 py-2 sm:px-5 sm:py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium shadow-md shadow-emerald-200 transition w-full sm:w-auto text-sm sm:text-base">ตกลง, แก้ไขข้อมูล</button>
                         </div>
                     </div>
                 </div>
@@ -688,22 +686,19 @@
 
             app.innerHTML = `
                 ${renderNavbar()}
-                <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" id="main-content">
+                <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 w-full" id="main-content">
                     ${mainContent}
                 </main>
                 ${renderModal()}
             `;
 
-            // If in form view, render dynamic inputs separately to not break HTML string composition
             if (state.currentView === 'form') {
                 renderStudentsList();
             }
 
-            // Initialize Lucide Icons
             lucide.createIcons();
         }
 
-        // Initial Render
         window.onload = renderApp;
 
     </script>
