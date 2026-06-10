@@ -1,3 +1,20 @@
+อาการหน้าเว็บขาว หรือเข้าใช้งานไม่ได้เลย มักเกิดจากการคัดลอกโค้ดไปวางแล้วขาดวงเล็บ หรือมีส่วนโค้ดที่ทับซ้อนกันจนระบบประมวลผล Javascript ไม่ทำงานครับ
+
+ไม่ต้องกังวลครับ เพื่อตัดปัญหาการก๊อปปี้ไปวางผิดจุด ผมได้รวบรวม **โค้ดทั้งหมดที่สมบูรณ์ 100% ในไฟล์เดียว** มาให้คุณแล้วครับ
+
+ในโค้ดชุดนี้ครอบคลุมการอัปเดตทุกอย่างที่คุณต้องการ:
+✅ โหลดข้อมูลจาก Google Sheets ของคุณอัตโนมัติ (ลิงก์ล่าสุด) หน้าเว็บจะแสดงสีเขียวตรงกันทุกเครื่อง
+✅ กล่องชื่อนักเรียน เพิ่ม/ลด อัตโนมัติ ตามตัวเลขเป๊ะๆ
+✅ เล่นเสียงพูด *"ขอบคุณที่ให้ความร่วมมือ..."* เมื่อบันทึกเสร็จ (รองรับทั้งมือถือและ PC)
+✅ รองรับขนาดหน้าจอทุกอุปกรณ์ (Responsive)
+
+**วิธีแก้ปัญหาทันที:**
+
+1. เปิดไฟล์ `index.html` ของคุณ
+2. **ลบโค้ดเก่าทิ้งทั้งหมด (ให้หน้ากระดาษว่างเปล่า)**
+3. คัดลอกโค้ดด้านล่างนี้ทั้งหมด ไปวาง แล้วกด Save ครับ
+
+```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -231,4 +248,481 @@
                 playThankYouSound();
 
                 document.getElementById('main-content').innerHTML = `
-                    <div class="flex
+                    <div class="flex flex-col items-center justify-center min-h-[60vh] zoom-in px-4 text-center">
+                        <i data-lucide="check-circle-2" class="text-emerald-500 w-24 h-24 mb-6 animate-bounce"></i>
+                        <h2 class="text-2xl font-bold text-slate-800 mb-2">บันทึกข้อมูลเรียบร้อยแล้ว</h2>
+                        <p class="text-slate-600 font-medium">ขอบคุณที่ให้ความร่วมมือ แล้วมาสร้างโรงเรียนปลอดยาเสพติดด้วยกัน</p>
+                        <p class="text-sm text-slate-400 mt-6">กำลังกลับสู่หน้าหลัก...</p>
+                    </div>
+                `;
+                lucide.createIcons();
+
+                // หน่วงเวลาให้เสียงพูดจบก่อนค่อยรีเฟรชหน้าเว็บ (ประมาณ 4 วินาที)
+                setTimeout(() => { window.location.reload(); }, 4500);
+
+            } catch (error) {
+                alert('เกิดข้อผิดพลาดในการส่งข้อมูล');
+                window.location.reload();
+            }
+        }
+
+        // --- Render Functions ---
+        function renderNavbar() {
+            return `
+            <nav class="bg-indigo-600 text-white shadow-lg sticky top-0 z-50 print-hidden">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between h-16">
+                        <div class="flex items-center space-x-2 cursor-pointer" onclick="navigateTo('home')">
+                            <i data-lucide="alert-triangle" class="text-yellow-300 w-8 h-8"></i>
+                            <span class="font-bold text-lg hidden sm:block">Anti-Drug Screening</span>
+                        </div>
+                        <div class="flex items-center space-x-1 sm:space-x-4">
+                            <button onclick="navigateTo('home')" class="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition ${state.currentView === 'home' ? 'bg-indigo-800 text-white' : 'text-indigo-100 hover:bg-indigo-500'}">
+                                <i data-lucide="home" class="w-4 h-4"></i> <span class="hidden sm:inline">หน้าแรก</span>
+                            </button>
+                            <button onclick="navigateTo('report')" class="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition ${state.currentView === 'report' ? 'bg-indigo-800 text-white' : 'text-indigo-100 hover:bg-indigo-500'}">
+                                <i data-lucide="bar-chart-3" class="w-4 h-4"></i> <span class="hidden sm:inline">รายงานผล</span>
+                            </button>
+                            ${state.isAdminLoggedIn ? `
+                                <button onclick="adminLogout()" class="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium hover:bg-indigo-500 transition text-indigo-100">
+                                    <i data-lucide="log-out" class="w-4 h-4"></i> <span class="hidden sm:inline">ออกจากระบบแอดมิน</span>
+                                </button>
+                            ` : `
+                                <button onclick="navigateTo('adminLogin')" class="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition ${state.currentView === 'adminLogin' ? 'bg-indigo-800 text-white' : 'text-indigo-100 hover:bg-indigo-500'}">
+                                    <i data-lucide="settings" class="w-4 h-4"></i> <span class="hidden sm:inline">แอดมิน</span>
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            </nav>`;
+        }
+
+        function renderHome() {
+            const submittedClasses = state.submissions.map(s => s.className);
+            let html = `
+                <div class="space-y-8 fade-in">
+                    <div class="text-center space-y-2">
+                        <h1 class="text-3xl font-bold text-slate-800">หน้าต่างคัดกรองการใช้สารเสพติด</h1>
+                        <p class="text-slate-500">สำหรับครูที่ปรึกษา กรุณาเลือกห้องเรียนของท่านเพื่อกรอกข้อมูล</p>
+                    </div>
+                    <div class="flex flex-wrap justify-center gap-4 sm:gap-6 mb-8 px-2">
+                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-emerald-500 shadow"></div><span class="text-sm">บันทึกแล้ว (แก้ไขได้)</span></div>
+                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-rose-500 shadow"></div><span class="text-sm">ยังไม่กรอกข้อมูล</span></div>
+                    </div>
+                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-10 gap-2 sm:gap-3">
+            `;
+
+            allClasses.forEach(cls => {
+                const isSubmitted = submittedClasses.includes(cls);
+                html += `
+                    <button onclick="handleClassClick('${cls}')" class="group relative overflow-hidden py-3 px-1 rounded-xl font-semibold text-xs sm:text-sm transition-all duration-300 flex flex-col items-center justify-center gap-2 shadow-sm hover:shadow-md hover:-translate-y-1
+                        ${isSubmitted ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:border-emerald-500 hover:bg-emerald-100' : 'bg-white text-rose-600 border border-rose-200 hover:border-rose-300'}">
+                        ${isSubmitted ? `<i data-lucide="check-circle-2" class="text-emerald-500 group-hover:hidden w-5 h-5 sm:w-6 sm:h-6"></i><i data-lucide="edit-3" class="text-emerald-600 hidden group-hover:block w-5 h-5 sm:w-6 sm:h-6"></i>` : `<i data-lucide="users" class="text-rose-400 w-5 h-5 sm:w-6 sm:h-6"></i>`}
+                        ${cls}
+                    </button>
+                `;
+            });
+
+            html += `</div></div>`;
+            return html;
+        }
+
+        function renderStudentsList() {
+            const container = document.getElementById('students-container');
+            if (!container) return;
+            
+            if (state.form.students.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '<div class="space-y-4 border-l-2 border-indigo-200 pl-3 sm:pl-4">';
+            state.form.students.forEach((student, index) => {
+                html += `
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4 relative group text-sm sm:text-base">
+                        <div class="flex justify-between items-center">
+                            <div class="font-medium text-indigo-700 bg-indigo-100 px-3 py-1 rounded-md text-sm">คนที่ ${index + 1}</div>
+                            <button type="button" onclick="removeStudent(${index})" class="text-slate-400 hover:text-rose-500 flex items-center gap-1 text-sm bg-white border px-2 py-1 rounded-md transition-colors">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i> <span class="hidden sm:inline">ลบข้อมูล</span>
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <input type="text" required placeholder="ชื่อ - นามสกุล นักเรียน" value="${student.name}" onchange="updateStudent(${index}, 'name', this.value)" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                            <select onchange="updateStudent(${index}, 'type', this.value)" class="w-full p-2.5 border border-slate-300 rounded-lg bg-white">
+                                <option value="กลุ่มเสี่ยง" ${student.type === 'กลุ่มเสี่ยง' ? 'selected' : ''}>กลุ่มเสี่ยง</option>
+                                <option value="กลุ่มเสพ" ${student.type === 'กลุ่มเสพ' ? 'selected' : ''}>กลุ่มเสพ</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-2">พฤติกรรมความเสี่ยง (เลือกได้มากกว่า 1)</label>
+                            <div class="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                                ${substanceTypes.map(sub => `
+                                    <label class="flex items-center space-x-2 cursor-pointer p-2 hover:bg-slate-200 rounded-md transition bg-white border border-slate-100">
+                                        <input type="checkbox" onchange="toggleSubstance(${index}, '${sub}')" ${student.substances.includes(sub) ? 'checked' : ''} class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+                                        <span class="text-sm text-slate-700">${sub}</span>
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        function renderForm() {
+            let html = `
+                <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-10 fade-in">
+                    <div class="mb-6 sm:mb-8 border-b pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-2">
+                        <div>
+                            <h2 class="text-xl sm:text-2xl font-bold text-slate-800">${state.editingData ? 'แก้ไขข้อมูลคัดกรองนักเรียน' : 'แบบฟอร์มคัดกรองนักเรียน'}</h2>
+                            <p class="text-slate-500 text-sm sm:text-base mt-1">กรุณากรอกข้อมูลให้ครบถ้วนตามความเป็นจริง</p>
+                        </div>
+                        ${state.editingData ? `<span class="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1"><i data-lucide="edit-3" class="w-4 h-4"></i> โหมดแก้ไข</span>` : ''}
+                    </div>
+
+                    <form onsubmit="submitForm(event)" class="space-y-8 sm:space-y-10">
+                        <section class="space-y-4">
+                            <div class="flex items-center gap-2 text-base sm:text-lg font-semibold text-indigo-700">
+                                <span class="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center shrink-0">1</span> ข้อมูลห้องเรียน
+                            </div>
+                            <div class="ml-4 sm:ml-10">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">เลือกห้องเรียน</label>
+                                <div class="relative w-full sm:w-1/2">
+                                    <select id="form-class" required ${state.editingData ? 'disabled' : ''} class="w-full p-3 border border-slate-300 rounded-lg appearance-none bg-white disabled:bg-slate-100 disabled:text-slate-500">
+                                        <option value="">-- กรุณาเลือกห้องเรียน --</option>
+                                        ${allClasses.map(cls => `<option value="${cls}" ${state.form.className === cls ? 'selected' : ''}>${cls}</option>`).join('')}
+                                    </select>
+                                    <i data-lucide="chevron-down" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none w-5 h-5"></i>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="space-y-4">
+                            <div class="flex items-center gap-2 text-base sm:text-lg font-semibold text-indigo-700">
+                                <span class="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center shrink-0">2</span> ข้อมูลกลุ่มเสี่ยง / กลุ่มเสพ
+                            </div>
+                            <div class="ml-4 sm:ml-10 space-y-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-1">จำนวนนักเรียน (หากไม่มีให้ใส่ 0)</label>
+                                    <input type="number" id="form-riskcount" min="0" required value="${state.form.riskCount}" oninput="handleRiskCountChange(this.value)" class="w-full sm:w-1/3 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="ระบุจำนวนตัวเลข">
+                                </div>
+
+                                <div id="students-container"></div>
+                                
+                                <button type="button" onclick="addStudentRow()" class="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100 transition-colors w-full sm:w-auto justify-center text-sm sm:text-base">
+                                    <i data-lucide="plus-circle" class="w-5 h-5"></i> เพิ่มรายชื่อนักเรียนอีก 1 คน
+                                </button>
+                            </div>
+                        </section>
+
+                        <section class="space-y-4">
+                            <div class="flex items-center gap-2 text-base sm:text-lg font-semibold text-indigo-700">
+                                <span class="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center shrink-0">3</span> ตัวแทนเข้าอบรม
+                            </div>
+                            <div class="ml-4 sm:ml-10">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">ชื่อตัวแทนเข้าอบรม (สำหรับห้องเรียนนี้)</label>
+                                <input type="text" id="form-leader" required value="${state.form.leaderName}" class="w-full sm:w-2/3 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="ชื่อ - นามสกุล ตัวแทนเข้าอบรม">
+                            </div>
+                        </section>
+
+                        <div class="pt-6 border-t flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
+                            <button type="button" onclick="navigateTo('home')" class="px-6 py-3 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 font-medium transition w-full sm:w-auto text-center">ยกเลิก</button>
+                            <button type="submit" class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium shadow-md shadow-indigo-200 transition w-full sm:w-auto text-center">${state.editingData ? 'บันทึกการแก้ไขข้อมูล' : 'บันทึกข้อมูลและส่ง'}</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            return html;
+        }
+
+        function updateReportFilter(key, value) {
+            state.reportFilters[key] = value;
+            if (key === 'grade') state.reportFilters.class = 'all'; 
+            renderApp();
+        }
+
+        function renderReport() {
+            let allStudents = [];
+            state.submissions.forEach(sub => {
+                if (state.reportFilters.grade !== 'all' && !sub.className.startsWith(state.reportFilters.grade)) return;
+                if (state.reportFilters.class !== 'all' && sub.className !== state.reportFilters.class) return;
+
+                sub.students.forEach(student => {
+                    if (state.reportFilters.type !== 'all' && student.type !== state.reportFilters.type) return;
+                    if (state.reportFilters.substance !== 'all' && !student.substances.includes(state.reportFilters.substance)) return;
+                    allStudents.push({ ...student, className: sub.className });
+                });
+            });
+
+            const stats = {
+                total: allStudents.length,
+                riskCount: allStudents.filter(s => s.type === 'กลุ่มเสี่ยง').length,
+                userCount: allStudents.filter(s => s.type === 'กลุ่มเสพ').length,
+                substanceCounts: {},
+                gradeCounts: {'ม.1':0, 'ม.2':0, 'ม.3':0, 'ม.4':0, 'ม.5':0, 'ม.6':0}
+            };
+
+            substanceTypes.forEach(sub => stats.substanceCounts[sub] = 0);
+            allStudents.forEach(s => {
+                s.substances.forEach(sub => { if(stats.substanceCounts[sub] !== undefined) stats.substanceCounts[sub]++; });
+                const grade = s.className.split('/')[0];
+                if(stats.gradeCounts[grade] !== undefined) stats.gradeCounts[grade]++;
+            });
+
+            let summaryText = "ยังไม่มีข้อมูลนักเรียนในกลุ่มเสี่ยงหรือกลุ่มเสพตามเงื่อนไขที่เลือก";
+            if (stats.total > 0) {
+                let maxGrade = ''; let maxGCount = -1;
+                Object.entries(stats.gradeCounts).forEach(([g, c]) => { if(c > maxGCount) { maxGCount = c; maxGrade = g; }});
+                let maxSub = ''; let maxSCount = -1;
+                Object.entries(stats.substanceCounts).forEach(([s, c]) => { if(c > maxSCount) { maxSCount = c; maxSub = s; }});
+                
+                summaryText = `จากข้อมูลสถิติภาพรวมที่กรอง พบนักเรียนที่เข้าข่ายทั้งหมด ${stats.total} คน แบ่งเป็นกลุ่มเสี่ยง ${stats.riskCount} คน และกลุ่มเสพ ${stats.userCount} คน เมื่อพิจารณาตามระดับชั้นพบว่า ${maxGCount > 0 ? `${maxGrade} มีจำนวนมากที่สุด (${maxGCount} คน)` : 'มีการกระจายตัวเท่าๆ กัน'} และชนิดพฤติกรรมเสี่ยง/สิ่งเสพติดที่พบมากที่สุดคือ ${maxSCount > 0 ? `${maxSub}` : '-'} สะท้อนให้เห็นว่าทางโรงเรียนควรเฝ้าระวังปัจจัยเสี่ยงดังกล่าวเป็นพิเศษ`;
+            }
+
+            return `
+                <div class="space-y-6 fade-in">
+                    <div class="flex justify-between items-end border-b pb-4">
+                        <div>
+                            <h2 class="text-xl sm:text-2xl font-bold text-slate-800">รายงานสถิติภาพรวมโรงเรียน</h2>
+                            <p class="text-slate-500 text-xs sm:text-sm mt-1">อัปเดตข้อมูลแบบ Real-time</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase">ระดับชั้น</label>
+                            <select onchange="updateReportFilter('grade', this.value)" class="w-full mt-1 p-2 border rounded-md text-xs sm:text-sm">
+                                <option value="all">ทุกระดับชั้น</option>
+                                ${['ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6'].map(g => `<option value="${g}" ${state.reportFilters.grade === g ? 'selected':''}>${g}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase">ห้องเรียน</label>
+                            <select onchange="updateReportFilter('class', this.value)" class="w-full mt-1 p-2 border rounded-md text-xs sm:text-sm" ${state.reportFilters.grade === 'all' ? 'disabled' : ''}>
+                                <option value="all">ทุกห้อง</option>
+                                ${state.reportFilters.grade !== 'all' ? allClasses.filter(c => c.startsWith(state.reportFilters.grade)).map(c => `<option value="${c}" ${state.reportFilters.class === c ? 'selected':''}>${c}</option>`).join('') : ''}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase">กลุ่มเป้าหมาย</label>
+                            <select onchange="updateReportFilter('type', this.value)" class="w-full mt-1 p-2 border rounded-md text-xs sm:text-sm">
+                                <option value="all" ${state.reportFilters.type === 'all' ? 'selected':''}>ทั้งหมด</option>
+                                <option value="กลุ่มเสี่ยง" ${state.reportFilters.type === 'กลุ่มเสี่ยง' ? 'selected':''}>เฉพาะกลุ่มเสี่ยง</option>
+                                <option value="กลุ่มเสพ" ${state.reportFilters.type === 'กลุ่มเสพ' ? 'selected':''}>เฉพาะกลุ่มเสพ</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase">สิ่งเสพติด</label>
+                            <select onchange="updateReportFilter('substance', this.value)" class="w-full mt-1 p-2 border rounded-md text-xs sm:text-sm">
+                                <option value="all" ${state.reportFilters.substance === 'all' ? 'selected':''}>ทั้งหมด</option>
+                                ${substanceTypes.map(s => `<option value="${s}" ${state.reportFilters.substance === s ? 'selected':''}>${s}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="bg-white p-6 rounded-xl border-l-4 border-indigo-500 shadow-sm flex flex-col justify-center">
+                            <span class="text-sm font-medium text-slate-500">จำนวนที่พบทั้งหมด</span>
+                            <span class="text-3xl sm:text-4xl font-bold text-slate-800 mt-2">${stats.total} <span class="text-sm sm:text-base font-normal text-slate-400">คน</span></span>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl border-l-4 border-amber-500 shadow-sm flex flex-col justify-center">
+                            <span class="text-sm font-medium text-slate-500">กลุ่มเสี่ยง</span>
+                            <span class="text-3xl sm:text-4xl font-bold text-amber-600 mt-2">${stats.riskCount} <span class="text-sm sm:text-base font-normal text-slate-400">คน</span></span>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl border-l-4 border-rose-500 shadow-sm flex flex-col justify-center">
+                            <span class="text-sm font-medium text-slate-500">กลุ่มเสพ</span>
+                            <span class="text-3xl sm:text-4xl font-bold text-rose-600 mt-2">${stats.userCount} <span class="text-sm sm:text-base font-normal text-slate-400">คน</span></span>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="alert-circle" class="text-indigo-500 w-5 h-5"></i> สถิติแยกตามชนิด</h3>
+                            <div class="space-y-4">
+                                ${Object.entries(stats.substanceCounts).sort((a,b)=>b[1]-a[1]).map(([name, count]) => `
+                                    <div>
+                                        <div class="flex justify-between text-sm mb-1"><span>${name}</span><span class="font-bold">${count} คน</span></div>
+                                        <div class="w-full bg-slate-100 rounded-full h-2">
+                                            <div class="bg-indigo-500 h-2 rounded-full" style="width: ${stats.total > 0 ? (count/stats.total)*100 : 0}%"></div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="bar-chart-3" class="text-indigo-500 w-5 h-5"></i> สถิติแยกตามระดับชั้น</h3>
+                            <div class="space-y-4">
+                                ${Object.entries(stats.gradeCounts).map(([name, count]) => `
+                                    <div>
+                                        <div class="flex justify-between text-sm mb-1"><span>${name}</span><span class="font-bold">${count} คน</span></div>
+                                        <div class="w-full bg-slate-100 rounded-full h-2">
+                                            <div class="bg-emerald-500 h-2 rounded-full" style="width: ${stats.total > 0 ? (count/stats.total)*100 : 0}%"></div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-indigo-50 p-5 sm:p-6 rounded-xl border border-indigo-100">
+                        <h3 class="font-bold text-indigo-900 mb-2 flex items-center gap-2"><i data-lucide="file-text" class="w-5 h-5"></i> บทสรุปผู้บริหาร</h3>
+                        <p class="text-indigo-800 text-xs sm:text-sm leading-relaxed indent-8">${summaryText}</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderAdminLogin() {
+            return `
+                <div class="max-w-md mx-auto mt-10 sm:mt-20 bg-white p-6 sm:p-8 rounded-2xl shadow-md border border-slate-200 text-center zoom-in mx-4 sm:mx-auto">
+                    <div class="mx-auto bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+                        <i data-lucide="settings" class="text-slate-600 w-8 h-8"></i>
+                    </div>
+                    <h2 class="text-xl sm:text-2xl font-bold text-slate-800 mb-2">สำหรับผู้ดูแลระบบ</h2>
+                    <p class="text-slate-500 text-sm mb-6">กรุณากรอกรหัสผ่านเพื่อเข้าถึงข้อมูล</p>
+                    <form onsubmit="adminLogin(event)" class="space-y-4">
+                        <div>
+                            <input type="password" id="admin-password" placeholder="รหัสผ่าน" class="w-full p-3 border rounded-lg text-center border-slate-300 focus:ring-2 focus:ring-indigo-200 focus:outline-none">
+                            <p id="login-error" class="text-rose-500 text-sm mt-2 hidden">รหัสผ่านไม่ถูกต้อง</p>
+                        </div>
+                        <button type="submit" class="w-full bg-slate-800 text-white p-3 rounded-lg hover:bg-slate-900 transition font-medium">เข้าสู่ระบบ</button>
+                    </form>
+                </div>
+            `;
+        }
+
+        function renderAdmin() {
+            let tbodyHtml = '';
+            if (state.submissions.length === 0) {
+                tbodyHtml = '<tr><td colspan="6" class="p-8 text-center text-slate-400">ยังไม่มีข้อมูลการคัดกรอง</td></tr>';
+            } else {
+                state.submissions.forEach((sub) => {
+                    if (sub.students.length === 0) {
+                        tbodyHtml += `
+                            <tr class="border-b hover:bg-slate-50">
+                                <td class="p-3 font-medium text-slate-800">${sub.className}</td>
+                                <td colspan="3" class="p-3 text-emerald-600 bg-emerald-50 text-center">ไม่มีนักเรียนกลุ่มเสี่ยง (จำนวน 0 คน)</td>
+                                <td class="p-3">${sub.leaderName || '-'}</td>
+                                <td class="p-3 text-xs text-slate-400">${new Date(sub.timestamp).toLocaleDateString('th-TH')}</td>
+                            </tr>`;
+                    } else {
+                        sub.students.forEach((student, idx) => {
+                            tbodyHtml += `
+                                <tr class="border-b hover:bg-slate-50">
+                                    <td class="p-3 font-medium text-slate-800">${idx === 0 ? sub.className : ''}</td>
+                                    <td class="p-3 min-w-[150px]">${student.name}</td>
+                                    <td class="p-3"><span class="px-2 py-1 rounded-full text-[10px] sm:text-xs font-medium ${student.type === 'กลุ่มเสี่ยง' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'} whitespace-nowrap">${student.type}</span></td>
+                                    <td class="p-3 min-w-[150px]">${student.substances.join(', ')}</td>
+                                    <td class="p-3 min-w-[120px]">${idx === 0 ? sub.leaderName : ''}</td>
+                                    <td class="p-3 text-[10px] sm:text-xs text-slate-400">${idx === 0 ? new Date(sub.timestamp).toLocaleString('th-TH', {dateStyle:'short', timeStyle:'short'}) : ''}</td>
+                                </tr>`;
+                        });
+                    }
+                });
+            }
+
+            return `
+                <div class="space-y-6 bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-200 fade-in">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4 print-hidden">
+                        <div>
+                            <h2 class="text-xl sm:text-2xl font-bold text-slate-800">ระบบจัดการข้อมูล (Admin)</h2>
+                            <p class="text-slate-500 text-sm">ข้อมูลรายชื่อนักเรียนกลุ่มเสี่ยง/เสพ ทั้งโรงเรียน</p>
+                        </div>
+                        <button onclick="window.print()" class="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg hover:bg-indigo-100 transition w-full sm:w-auto justify-center">
+                            <i data-lucide="printer" class="w-5 h-5"></i> พิมพ์รายงาน
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto print:overflow-visible">
+                        <table class="w-full text-left border-collapse min-w-[800px]">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-700 text-xs sm:text-sm whitespace-nowrap">
+                                    <th class="p-3 border-b font-semibold w-20 sm:w-24">ห้องเรียน</th>
+                                    <th class="p-3 border-b font-semibold">ชื่อ-นามสกุล</th>
+                                    <th class="p-3 border-b font-semibold w-24 sm:w-32">ประเภท</th>
+                                    <th class="p-3 border-b font-semibold">สิ่งที่เกี่ยวข้อง</th>
+                                    <th class="p-3 border-b font-semibold">ตัวแทนเข้าอบรม</th>
+                                    <th class="p-3 border-b font-semibold w-24 sm:w-32">เวลาที่บันทึก</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-xs sm:text-sm text-slate-600">
+                                ${tbodyHtml}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderModal() {
+            if (!state.confirmModal.isOpen) return '';
+            return `
+                <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[100] fade-in print-hidden px-4">
+                    <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl max-w-sm w-full zoom-in text-center">
+                        <div class="w-16 h-16 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i data-lucide="edit-3" class="w-8 h-8"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-800 mb-2">ยืนยันการแก้ไขข้อมูล</h3>
+                        <p class="text-slate-600 text-sm sm:text-base">
+                            ห้อง <span class="font-bold text-indigo-600 text-lg">${state.confirmModal.classToEdit}</span> มีการบันทึกข้อมูลไปแล้ว<br/>
+                            คุณต้องการเข้าสู่ "โหมดแก้ไข" ใช่หรือไม่?
+                        </p>
+                        <div class="flex flex-col sm:flex-row justify-center gap-3 mt-8">
+                            <button onclick="cancelEdit()" class="px-5 py-2.5 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600 font-medium transition w-full sm:w-auto">ยกเลิก</button>
+                            <button onclick="proceedToEdit()" class="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium shadow-md shadow-emerald-200 transition w-full sm:w-auto">ตกลง, แก้ไขข้อมูล</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Main Render Logic ---
+        function renderApp() {
+            const app = document.getElementById('app');
+            
+            if (state.isLoading) {
+                app.innerHTML = `
+                    <div class="flex flex-col items-center justify-center min-h-screen bg-slate-50">
+                        <i data-lucide="loader-2" class="text-indigo-600 w-12 h-12 mb-4 animate-spin"></i>
+                        <h2 class="text-xl font-bold text-slate-800">กำลังเชื่อมต่อฐานข้อมูล...</h2>
+                        <p class="text-slate-500 text-sm mt-2">กรุณารอสักครู่</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            let mainContent = '';
+            if (state.currentView === 'home') mainContent = renderHome();
+            else if (state.currentView === 'form') mainContent = renderForm();
+            else if (state.currentView === 'report') mainContent = renderReport();
+            else if (state.currentView === 'adminLogin') mainContent = renderAdminLogin();
+            else if (state.currentView === 'admin') mainContent = renderAdmin();
+
+            app.innerHTML = `
+                ${renderNavbar()}
+                <main class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-4 sm:py-8" id="main-content">
+                    ${mainContent}
+                </main>
+                ${renderModal()}
+            `;
+
+            if (state.currentView === 'form') {
+                renderStudentsList();
+            }
+
+            lucide.createIcons();
+        }
+
+        // เริ่มต้นการทำงาน
+        window.onload = loadDataFromSheet;
+
+    </script>
+</body>
+</html>
+
+```
