@@ -1,35 +1,25 @@
-อาการหน้าเว็บขาว หรือเข้าใช้งานไม่ได้เลย มักเกิดจากการคัดลอกโค้ดไปวางแล้วขาดวงเล็บ หรือมีส่วนโค้ดที่ทับซ้อนกันจนระบบประมวลผล Javascript ไม่ทำงานครับ
-
-ไม่ต้องกังวลครับ เพื่อตัดปัญหาการก๊อปปี้ไปวางผิดจุด ผมได้รวบรวม **โค้ดทั้งหมดที่สมบูรณ์ 100% ในไฟล์เดียว** มาให้คุณแล้วครับ
-
-ในโค้ดชุดนี้ครอบคลุมการอัปเดตทุกอย่างที่คุณต้องการ:
-✅ โหลดข้อมูลจาก Google Sheets ของคุณอัตโนมัติ (ลิงก์ล่าสุด) หน้าเว็บจะแสดงสีเขียวตรงกันทุกเครื่อง
-✅ กล่องชื่อนักเรียน เพิ่ม/ลด อัตโนมัติ ตามตัวเลขเป๊ะๆ
-✅ เล่นเสียงพูด *"ขอบคุณที่ให้ความร่วมมือ..."* เมื่อบันทึกเสร็จ (รองรับทั้งมือถือและ PC)
-✅ รองรับขนาดหน้าจอทุกอุปกรณ์ (Responsive)
-
-**วิธีแก้ปัญหาทันที:**
-
-1. เปิดไฟล์ `index.html` ของคุณ
-2. **ลบโค้ดเก่าทิ้งทั้งหมด (ให้หน้ากระดาษว่างเปล่า)**
-3. คัดลอกโค้ดด้านล่างนี้ทั้งหมด ไปวาง แล้วกด Save ครับ
-
-```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ระบบคัดกรองยาเสพติดนักเรียน</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts (Kanit) -->
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Kanit', sans-serif; }
+        body { font-family: 'Kanit', sans-serif; -webkit-tap-highlight-color: transparent; }
         .fade-in { animation: fadeIn 0.5s ease-in-out; }
         .zoom-in { animation: zoomIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes zoomIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        /* ซ่อน Scrollbar แต่ยังเลื่อนได้ */
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+        
         @media print {
             body { background: white !important; }
             nav, .print-hidden { display: none !important; }
@@ -63,7 +53,8 @@
         // --- State Management ---
         const state = {
             currentView: 'home',
-            isLoading: true, // เริ่มต้นด้วยสถานะกำลังโหลด
+            isLoading: true, 
+            isSubmitting: false, // ป้องกันการกดบันทึกซ้ำ
             submissions: [],
             isAdminLoggedIn: false,
             editingData: null,
@@ -74,13 +65,11 @@
 
         // --- Core Functions ---
         
-        // ดึงข้อมูลจาก Google Sheets ตอนเปิดเว็บ
         async function loadDataFromSheet() {
             try {
                 const response = await fetch(SCRIPT_URL);
                 const data = await response.json();
                 
-                // จัดกลุ่มข้อมูลตามห้องเรียน
                 const groupedData = {};
                 data.forEach(row => {
                     if (!groupedData[row.className]) {
@@ -111,18 +100,24 @@
             }
         }
 
-        // ฟังก์ชันเล่นเสียง
+        // ฟังก์ชันเล่นเสียง (อัปเดตให้รองรับมือถือดีขึ้น)
         function playThankYouSound() {
             if ('speechSynthesis' in window) {
+                // ยกเลิกเสียงเก่าที่ค้างอยู่ (ถ้ามี)
+                window.speechSynthesis.cancel(); 
+                
                 const msg = new SpeechSynthesisUtterance();
                 msg.text = "ขอบคุณที่ให้ความร่วมมือ แล้วมาสร้างโรงเรียนปลอดยาเสพติดด้วยกัน ขอบคุณครับ";
-                msg.lang = 'th-TH'; // ภาษาไทย
+                msg.lang = 'th-TH'; 
+                msg.rate = 1.0; // ความเร็วปกติ
+                msg.volume = 1.0;
                 window.speechSynthesis.speak(msg);
             }
         }
 
         function navigateTo(view) {
             state.currentView = view;
+            window.scrollTo(0,0);
             renderApp();
         }
 
@@ -218,6 +213,13 @@
 
         async function submitForm(e) {
             e.preventDefault();
+            
+            if(state.isSubmitting) return; // ป้องกันกดเบิ้ล
+            state.isSubmitting = true;
+            
+            // เล่นเสียงทันทีที่กดปุ่ม เพื่อเลี่ยงการถูกบล็อกบน iOS
+            playThankYouSound();
+
             state.form.className = document.getElementById('form-class').value;
             state.form.leaderName = document.getElementById('form-leader').value;
 
@@ -232,7 +234,7 @@
                 <div class="flex flex-col items-center justify-center min-h-[60vh] zoom-in">
                     <i data-lucide="loader-2" class="text-indigo-500 w-16 h-16 mb-4 animate-spin"></i>
                     <h2 class="text-xl font-bold text-slate-800">กำลังส่งข้อมูลไปยังระบบ...</h2>
-                    <p class="text-slate-500 text-sm mt-2">กรุณารอสักครู่</p>
+                    <p class="text-slate-500 text-sm mt-2">กรุณารอสักครู่ ห้ามปิดหน้าต่างนี้</p>
                 </div>
             `;
             lucide.createIcons();
@@ -244,24 +246,22 @@
                     mode: 'no-cors'
                 });
 
-                // สั่งเล่นเสียงเมื่อบันทึกเสร็จ
-                playThankYouSound();
-
                 document.getElementById('main-content').innerHTML = `
                     <div class="flex flex-col items-center justify-center min-h-[60vh] zoom-in px-4 text-center">
                         <i data-lucide="check-circle-2" class="text-emerald-500 w-24 h-24 mb-6 animate-bounce"></i>
                         <h2 class="text-2xl font-bold text-slate-800 mb-2">บันทึกข้อมูลเรียบร้อยแล้ว</h2>
-                        <p class="text-slate-600 font-medium">ขอบคุณที่ให้ความร่วมมือ แล้วมาสร้างโรงเรียนปลอดยาเสพติดด้วยกัน</p>
-                        <p class="text-sm text-slate-400 mt-6">กำลังกลับสู่หน้าหลัก...</p>
+                        <p class="text-slate-600 font-medium text-lg mt-2">ขอบคุณที่ให้ความร่วมมือ <br class="sm:hidden"/>แล้วมาสร้างโรงเรียนปลอดยาเสพติดด้วยกัน</p>
+                        <p class="text-sm text-slate-400 mt-8">กำลังกลับสู่หน้าหลัก...</p>
                     </div>
                 `;
                 lucide.createIcons();
 
-                // หน่วงเวลาให้เสียงพูดจบก่อนค่อยรีเฟรชหน้าเว็บ (ประมาณ 4 วินาที)
-                setTimeout(() => { window.location.reload(); }, 4500);
+                // หน่วงเวลา 4 วิให้เสียงพูดจบ แล้วรีเฟรชกลับหน้าแรก
+                setTimeout(() => { window.location.reload(); }, 4000);
 
             } catch (error) {
                 alert('เกิดข้อผิดพลาดในการส่งข้อมูล');
+                state.isSubmitting = false;
                 window.location.reload();
             }
         }
@@ -273,8 +273,8 @@
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div class="flex justify-between h-16">
                         <div class="flex items-center space-x-2 cursor-pointer" onclick="navigateTo('home')">
-                            <i data-lucide="alert-triangle" class="text-yellow-300 w-8 h-8"></i>
-                            <span class="font-bold text-lg hidden sm:block">Anti-Drug Screening</span>
+                            <i data-lucide="shield-alert" class="text-yellow-300 w-7 h-7 sm:w-8 sm:h-8"></i>
+                            <span class="font-bold text-base sm:text-lg">Anti-Drug Screening</span>
                         </div>
                         <div class="flex items-center space-x-1 sm:space-x-4">
                             <button onclick="navigateTo('home')" class="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition ${state.currentView === 'home' ? 'bg-indigo-800 text-white' : 'text-indigo-100 hover:bg-indigo-500'}">
@@ -285,7 +285,7 @@
                             </button>
                             ${state.isAdminLoggedIn ? `
                                 <button onclick="adminLogout()" class="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium hover:bg-indigo-500 transition text-indigo-100">
-                                    <i data-lucide="log-out" class="w-4 h-4"></i> <span class="hidden sm:inline">ออกจากระบบแอดมิน</span>
+                                    <i data-lucide="log-out" class="w-4 h-4"></i> <span class="hidden sm:inline">ออกจากระบบ</span>
                                 </button>
                             ` : `
                                 <button onclick="navigateTo('adminLogin')" class="flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition ${state.currentView === 'adminLogin' ? 'bg-indigo-800 text-white' : 'text-indigo-100 hover:bg-indigo-500'}">
@@ -301,23 +301,22 @@
         function renderHome() {
             const submittedClasses = state.submissions.map(s => s.className);
             let html = `
-                <div class="space-y-8 fade-in">
-                    <div class="text-center space-y-2">
-                        <h1 class="text-3xl font-bold text-slate-800">หน้าต่างคัดกรองการใช้สารเสพติด</h1>
-                        <p class="text-slate-500">สำหรับครูที่ปรึกษา กรุณาเลือกห้องเรียนของท่านเพื่อกรอกข้อมูล</p>
+                <div class="space-y-6 sm:space-y-8 fade-in">
+                    <div class="text-center space-y-2 mt-2 sm:mt-0">
+                        <h1 class="text-2xl sm:text-3xl font-bold text-slate-800">หน้าต่างคัดกรองการใช้สารเสพติด</h1>
+                        <p class="text-slate-500 text-sm sm:text-base px-2">สำหรับครูที่ปรึกษา กรุณาเลือกห้องเรียนของท่านเพื่อกรอกข้อมูล</p>
                     </div>
                     <div class="flex flex-wrap justify-center gap-4 sm:gap-6 mb-8 px-2">
-                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-emerald-500 shadow"></div><span class="text-sm">บันทึกแล้ว (แก้ไขได้)</span></div>
-                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-rose-500 shadow"></div><span class="text-sm">ยังไม่กรอกข้อมูล</span></div>
+                        <div class="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100"><div class="w-3 h-3 rounded-full bg-emerald-500 shadow-sm"></div><span class="text-xs sm:text-sm font-medium text-emerald-700">บันทึกแล้ว (แก้ไขได้)</span></div>
+                        <div class="flex items-center gap-2 bg-rose-50 px-3 py-1.5 rounded-full border border-rose-100"><div class="w-3 h-3 rounded-full bg-rose-500 shadow-sm"></div><span class="text-xs sm:text-sm font-medium text-rose-700">ยังไม่กรอกข้อมูล</span></div>
                     </div>
-                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-10 gap-2 sm:gap-3">
+                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-10 gap-2 sm:gap-3 px-2 sm:px-0">
             `;
 
             allClasses.forEach(cls => {
                 const isSubmitted = submittedClasses.includes(cls);
                 html += `
-                    <button onclick="handleClassClick('${cls}')" class="group relative overflow-hidden py-3 px-1 rounded-xl font-semibold text-xs sm:text-sm transition-all duration-300 flex flex-col items-center justify-center gap-2 shadow-sm hover:shadow-md hover:-translate-y-1
-                        ${isSubmitted ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:border-emerald-500 hover:bg-emerald-100' : 'bg-white text-rose-600 border border-rose-200 hover:border-rose-300'}">
+                    <button onclick="handleClassClick('${cls}')" class="group relative overflow-hidden py-3 px-1 rounded-xl font-semibold text-[13px] sm:text-sm transition-all duration-300 flex flex-col items-center justify-center gap-1.5 sm:gap-2 shadow-sm hover:shadow-md hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-offset-2 ${isSubmitted ? 'focus:ring-emerald-500 bg-emerald-50 text-emerald-700 border border-emerald-300 hover:border-emerald-500 hover:bg-emerald-100' : 'focus:ring-rose-500 bg-white text-rose-600 border border-rose-200 hover:border-rose-400'}">
                         ${isSubmitted ? `<i data-lucide="check-circle-2" class="text-emerald-500 group-hover:hidden w-5 h-5 sm:w-6 sm:h-6"></i><i data-lucide="edit-3" class="text-emerald-600 hidden group-hover:block w-5 h-5 sm:w-6 sm:h-6"></i>` : `<i data-lucide="users" class="text-rose-400 w-5 h-5 sm:w-6 sm:h-6"></i>`}
                         ${cls}
                     </button>
@@ -343,13 +342,13 @@
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4 relative group text-sm sm:text-base">
                         <div class="flex justify-between items-center">
                             <div class="font-medium text-indigo-700 bg-indigo-100 px-3 py-1 rounded-md text-sm">คนที่ ${index + 1}</div>
-                            <button type="button" onclick="removeStudent(${index})" class="text-slate-400 hover:text-rose-500 flex items-center gap-1 text-sm bg-white border px-2 py-1 rounded-md transition-colors">
+                            <button type="button" onclick="removeStudent(${index})" class="text-slate-400 hover:text-rose-500 flex items-center gap-1 text-sm bg-white border px-2 py-1 rounded-md transition-colors shadow-sm">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i> <span class="hidden sm:inline">ลบข้อมูล</span>
                             </button>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <input type="text" required placeholder="ชื่อ - นามสกุล นักเรียน" value="${student.name}" onchange="updateStudent(${index}, 'name', this.value)" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
-                            <select onchange="updateStudent(${index}, 'type', this.value)" class="w-full p-2.5 border border-slate-300 rounded-lg bg-white">
+                            <input type="text" required placeholder="ชื่อ - นามสกุล นักเรียน" value="${student.name}" onchange="updateStudent(${index}, 'name', this.value)" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white">
+                            <select onchange="updateStudent(${index}, 'type', this.value)" class="w-full p-2.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500">
                                 <option value="กลุ่มเสี่ยง" ${student.type === 'กลุ่มเสี่ยง' ? 'selected' : ''}>กลุ่มเสี่ยง</option>
                                 <option value="กลุ่มเสพ" ${student.type === 'กลุ่มเสพ' ? 'selected' : ''}>กลุ่มเสพ</option>
                             </select>
@@ -358,9 +357,9 @@
                             <label class="block text-sm font-medium text-slate-700 mb-2">พฤติกรรมความเสี่ยง (เลือกได้มากกว่า 1)</label>
                             <div class="grid grid-cols-2 lg:grid-cols-3 gap-2">
                                 ${substanceTypes.map(sub => `
-                                    <label class="flex items-center space-x-2 cursor-pointer p-2 hover:bg-slate-200 rounded-md transition bg-white border border-slate-100">
+                                    <label class="flex items-center space-x-2 cursor-pointer p-2 sm:p-2.5 hover:bg-slate-200 rounded-lg transition bg-white border border-slate-200 shadow-sm">
                                         <input type="checkbox" onchange="toggleSubstance(${index}, '${sub}')" ${student.substances.includes(sub) ? 'checked' : ''} class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
-                                        <span class="text-sm text-slate-700">${sub}</span>
+                                        <span class="text-xs sm:text-sm text-slate-700">${sub}</span>
                                     </label>
                                 `).join('')}
                             </div>
@@ -381,18 +380,19 @@
                             <h2 class="text-xl sm:text-2xl font-bold text-slate-800">${state.editingData ? 'แก้ไขข้อมูลคัดกรองนักเรียน' : 'แบบฟอร์มคัดกรองนักเรียน'}</h2>
                             <p class="text-slate-500 text-sm sm:text-base mt-1">กรุณากรอกข้อมูลให้ครบถ้วนตามความเป็นจริง</p>
                         </div>
-                        ${state.editingData ? `<span class="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1"><i data-lucide="edit-3" class="w-4 h-4"></i> โหมดแก้ไข</span>` : ''}
+                        ${state.editingData ? `<span class="bg-amber-100 text-amber-700 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1.5 border border-amber-200"><i data-lucide="edit-3" class="w-4 h-4"></i> โหมดแก้ไข</span>` : ''}
                     </div>
 
                     <form onsubmit="submitForm(event)" class="space-y-8 sm:space-y-10">
+                        <!-- ส่วนที่ 1 -->
                         <section class="space-y-4">
                             <div class="flex items-center gap-2 text-base sm:text-lg font-semibold text-indigo-700">
-                                <span class="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center shrink-0">1</span> ข้อมูลห้องเรียน
+                                <span class="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm">1</span> ข้อมูลห้องเรียน
                             </div>
                             <div class="ml-4 sm:ml-10">
                                 <label class="block text-sm font-medium text-slate-700 mb-1">เลือกห้องเรียน</label>
                                 <div class="relative w-full sm:w-1/2">
-                                    <select id="form-class" required ${state.editingData ? 'disabled' : ''} class="w-full p-3 border border-slate-300 rounded-lg appearance-none bg-white disabled:bg-slate-100 disabled:text-slate-500">
+                                    <select id="form-class" required ${state.editingData ? 'disabled' : ''} class="w-full p-3 border border-slate-300 rounded-lg appearance-none bg-white disabled:bg-slate-100 disabled:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                                         <option value="">-- กรุณาเลือกห้องเรียน --</option>
                                         ${allClasses.map(cls => `<option value="${cls}" ${state.form.className === cls ? 'selected' : ''}>${cls}</option>`).join('')}
                                     </select>
@@ -401,37 +401,41 @@
                             </div>
                         </section>
 
+                        <!-- ส่วนที่ 2 -->
                         <section class="space-y-4">
                             <div class="flex items-center gap-2 text-base sm:text-lg font-semibold text-indigo-700">
-                                <span class="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center shrink-0">2</span> ข้อมูลกลุ่มเสี่ยง / กลุ่มเสพ
+                                <span class="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm">2</span> ข้อมูลกลุ่มเสี่ยง / กลุ่มเสพ
                             </div>
                             <div class="ml-4 sm:ml-10 space-y-6">
                                 <div>
                                     <label class="block text-sm font-medium text-slate-700 mb-1">จำนวนนักเรียน (หากไม่มีให้ใส่ 0)</label>
-                                    <input type="number" id="form-riskcount" min="0" required value="${state.form.riskCount}" oninput="handleRiskCountChange(this.value)" class="w-full sm:w-1/3 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="ระบุจำนวนตัวเลข">
+                                    <input type="number" id="form-riskcount" min="0" required value="${state.form.riskCount}" oninput="handleRiskCountChange(this.value)" class="w-full sm:w-1/3 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white" placeholder="ระบุจำนวนตัวเลข">
                                 </div>
 
                                 <div id="students-container"></div>
                                 
-                                <button type="button" onclick="addStudentRow()" class="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100 transition-colors w-full sm:w-auto justify-center text-sm sm:text-base">
+                                <button type="button" onclick="addStudentRow()" class="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium bg-indigo-50 px-4 py-2.5 rounded-lg border border-indigo-100 transition-colors w-full sm:w-auto justify-center text-sm sm:text-base">
                                     <i data-lucide="plus-circle" class="w-5 h-5"></i> เพิ่มรายชื่อนักเรียนอีก 1 คน
                                 </button>
                             </div>
                         </section>
 
+                        <!-- ส่วนที่ 3 -->
                         <section class="space-y-4">
                             <div class="flex items-center gap-2 text-base sm:text-lg font-semibold text-indigo-700">
-                                <span class="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center shrink-0">3</span> ตัวแทนเข้าอบรม
+                                <span class="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm">3</span> ตัวแทนเข้าอบรม
                             </div>
                             <div class="ml-4 sm:ml-10">
                                 <label class="block text-sm font-medium text-slate-700 mb-1">ชื่อตัวแทนเข้าอบรม (สำหรับห้องเรียนนี้)</label>
-                                <input type="text" id="form-leader" required value="${state.form.leaderName}" class="w-full sm:w-2/3 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="ชื่อ - นามสกุล ตัวแทนเข้าอบรม">
+                                <input type="text" id="form-leader" required value="${state.form.leaderName}" class="w-full sm:w-2/3 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white" placeholder="ชื่อ - นามสกุล ตัวแทนเข้าอบรม">
                             </div>
                         </section>
 
                         <div class="pt-6 border-t flex flex-col sm:flex-row justify-end gap-3 sm:gap-4">
                             <button type="button" onclick="navigateTo('home')" class="px-6 py-3 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 font-medium transition w-full sm:w-auto text-center">ยกเลิก</button>
-                            <button type="submit" class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium shadow-md shadow-indigo-200 transition w-full sm:w-auto text-center">${state.editingData ? 'บันทึกการแก้ไขข้อมูล' : 'บันทึกข้อมูลและส่ง'}</button>
+                            <button type="submit" id="submit-btn" class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium shadow-md shadow-indigo-200 transition w-full sm:w-auto text-center flex justify-center items-center gap-2">
+                                <i data-lucide="save" class="w-5 h-5"></i> ${state.editingData ? 'บันทึกการแก้ไขข้อมูล' : 'บันทึกข้อมูลและส่ง'}
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -485,7 +489,7 @@
 
             return `
                 <div class="space-y-6 fade-in">
-                    <div class="flex justify-between items-end border-b pb-4">
+                    <div class="flex justify-between items-end border-b pb-4 px-2 sm:px-0">
                         <div>
                             <h2 class="text-xl sm:text-2xl font-bold text-slate-800">รายงานสถิติภาพรวมโรงเรียน</h2>
                             <p class="text-slate-500 text-xs sm:text-sm mt-1">อัปเดตข้อมูลแบบ Real-time</p>
@@ -495,21 +499,21 @@
                     <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                             <label class="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase">ระดับชั้น</label>
-                            <select onchange="updateReportFilter('grade', this.value)" class="w-full mt-1 p-2 border rounded-md text-xs sm:text-sm">
+                            <select onchange="updateReportFilter('grade', this.value)" class="w-full mt-1 p-2 border rounded-md text-xs sm:text-sm bg-white">
                                 <option value="all">ทุกระดับชั้น</option>
                                 ${['ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6'].map(g => `<option value="${g}" ${state.reportFilters.grade === g ? 'selected':''}>${g}</option>`).join('')}
                             </select>
                         </div>
                         <div>
                             <label class="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase">ห้องเรียน</label>
-                            <select onchange="updateReportFilter('class', this.value)" class="w-full mt-1 p-2 border rounded-md text-xs sm:text-sm" ${state.reportFilters.grade === 'all' ? 'disabled' : ''}>
+                            <select onchange="updateReportFilter('class', this.value)" class="w-full mt-1 p-2 border rounded-md text-xs sm:text-sm bg-white" ${state.reportFilters.grade === 'all' ? 'disabled' : ''}>
                                 <option value="all">ทุกห้อง</option>
                                 ${state.reportFilters.grade !== 'all' ? allClasses.filter(c => c.startsWith(state.reportFilters.grade)).map(c => `<option value="${c}" ${state.reportFilters.class === c ? 'selected':''}>${c}</option>`).join('') : ''}
                             </select>
                         </div>
                         <div>
                             <label class="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase">กลุ่มเป้าหมาย</label>
-                            <select onchange="updateReportFilter('type', this.value)" class="w-full mt-1 p-2 border rounded-md text-xs sm:text-sm">
+                            <select onchange="updateReportFilter('type', this.value)" class="w-full mt-1 p-2 border rounded-md text-xs sm:text-sm bg-white">
                                 <option value="all" ${state.reportFilters.type === 'all' ? 'selected':''}>ทั้งหมด</option>
                                 <option value="กลุ่มเสี่ยง" ${state.reportFilters.type === 'กลุ่มเสี่ยง' ? 'selected':''}>เฉพาะกลุ่มเสี่ยง</option>
                                 <option value="กลุ่มเสพ" ${state.reportFilters.type === 'กลุ่มเสพ' ? 'selected':''}>เฉพาะกลุ่มเสพ</option>
@@ -517,7 +521,7 @@
                         </div>
                         <div>
                             <label class="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase">สิ่งเสพติด</label>
-                            <select onchange="updateReportFilter('substance', this.value)" class="w-full mt-1 p-2 border rounded-md text-xs sm:text-sm">
+                            <select onchange="updateReportFilter('substance', this.value)" class="w-full mt-1 p-2 border rounded-md text-xs sm:text-sm bg-white">
                                 <option value="all" ${state.reportFilters.substance === 'all' ? 'selected':''}>ทั้งหมด</option>
                                 ${substanceTypes.map(s => `<option value="${s}" ${state.reportFilters.substance === s ? 'selected':''}>${s}</option>`).join('')}
                             </select>
@@ -637,7 +641,8 @@
                             <i data-lucide="printer" class="w-5 h-5"></i> พิมพ์รายงาน
                         </button>
                     </div>
-                    <div class="overflow-x-auto print:overflow-visible">
+                    <!-- เพิ่มคลาส hide-scroll เพื่อให้เลื่อนได้แต่ไม่เห็นแถบ -->
+                    <div class="overflow-x-auto hide-scroll print:overflow-visible rounded-lg border border-slate-100">
                         <table class="w-full text-left border-collapse min-w-[800px]">
                             <thead>
                                 <tr class="bg-slate-100 text-slate-700 text-xs sm:text-sm whitespace-nowrap">
@@ -654,6 +659,7 @@
                             </tbody>
                         </table>
                     </div>
+                    <p class="text-[10px] text-slate-400 text-center sm:hidden print-hidden">← เลื่อนตารางไปด้านข้างเพื่อดูข้อมูลเพิ่มเติม →</p>
                 </div>
             `;
         }
@@ -662,18 +668,20 @@
             if (!state.confirmModal.isOpen) return '';
             return `
                 <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[100] fade-in print-hidden px-4">
-                    <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl max-w-sm w-full zoom-in text-center">
-                        <div class="w-16 h-16 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl max-w-sm w-full zoom-in text-center border border-slate-100">
+                        <div class="w-16 h-16 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
                             <i data-lucide="edit-3" class="w-8 h-8"></i>
                         </div>
                         <h3 class="text-xl font-bold text-slate-800 mb-2">ยืนยันการแก้ไขข้อมูล</h3>
                         <p class="text-slate-600 text-sm sm:text-base">
-                            ห้อง <span class="font-bold text-indigo-600 text-lg">${state.confirmModal.classToEdit}</span> มีการบันทึกข้อมูลไปแล้ว<br/>
-                            คุณต้องการเข้าสู่ "โหมดแก้ไข" ใช่หรือไม่?
+                            ห้อง <span class="font-bold text-indigo-600 text-lg">${state.confirmModal.classToEdit}</span> มีการบันทึกไปแล้ว<br/>
+                            คุณต้องการเข้าสู่โหมดแก้ไขใช่หรือไม่?
                         </p>
                         <div class="flex flex-col sm:flex-row justify-center gap-3 mt-8">
                             <button onclick="cancelEdit()" class="px-5 py-2.5 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600 font-medium transition w-full sm:w-auto">ยกเลิก</button>
-                            <button onclick="proceedToEdit()" class="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium shadow-md shadow-emerald-200 transition w-full sm:w-auto">ตกลง, แก้ไขข้อมูล</button>
+                            <button onclick="proceedToEdit()" class="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium shadow-md shadow-emerald-200 transition w-full sm:w-auto flex items-center justify-center gap-2">
+                                <i data-lucide="check" class="w-4 h-4"></i> ตกลง
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -688,7 +696,7 @@
                 app.innerHTML = `
                     <div class="flex flex-col items-center justify-center min-h-screen bg-slate-50">
                         <i data-lucide="loader-2" class="text-indigo-600 w-12 h-12 mb-4 animate-spin"></i>
-                        <h2 class="text-xl font-bold text-slate-800">กำลังเชื่อมต่อฐานข้อมูล...</h2>
+                        <h2 class="text-xl font-bold text-slate-800">กำลังเชื่อมต่อระบบ...</h2>
                         <p class="text-slate-500 text-sm mt-2">กรุณารอสักครู่</p>
                     </div>
                 `;
@@ -718,11 +726,9 @@
             lucide.createIcons();
         }
 
-        // เริ่มต้นการทำงาน
+        // เริ่มต้นการทำงานเมื่อโหลดหน้าเว็บเสร็จ
         window.onload = loadDataFromSheet;
 
     </script>
 </body>
 </html>
-
-```
